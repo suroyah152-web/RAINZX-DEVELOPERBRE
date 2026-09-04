@@ -9,8 +9,9 @@
     (Combat/Legit/Rage/Visuals/Settings/Configs), triggerbot auto shoot, dan
     cleanup/render loop. Rebrand RAINZX DEV; logika kode tetap verbatim.
 
-    DEPENDENSI: butuh file UI library (RAINZXDev_UI.lua) di repo RAINZX DEV →
-    https://raw.githubusercontent.com/suroyah152-web/RAINZX-DEVELOPERBRE/main/RAINZXDev_UI.lua
+    DEPENDENSI: NONE — build self-contained (UI library di-embed langsung,
+    tidak perlu download dari repo. Loader dan versi file tunggal siap pakai.
+    Menu tampil otomatis saat execute; tombol "–" minimize, "✕" close, tanpa keybind.
 ]]
 
 -- RAINZX DEV · Aim / ESP · UI Library Edition
@@ -943,22 +944,24 @@ RAINZXDev_UI.CreateWindow = function(opts)
         Parent = header,
     })
 
-    local closeButton = new("TextButton", {
+    local minimizeButton = new("TextButton", {
         BackgroundColor3 = THEME.Element,
         BorderSizePixel = 0,
-        Text = "✕",
+        Text = "–",
         TextColor3 = THEME.Text,
         TextSize = 14,
         Font = FONT_BOLD,
         AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -8, 0, 8),
+        Position = UDim2.new(1, -46, 0, 8),
         Size = UDim2.fromOffset(30, 30),
         ZIndex = 3,
         Parent = header,
     })
-    corner(closeButton, 8)
-    closeButton.MouseEnter:Connect(function() pcall(function() closeButton.BackgroundColor3 = THEME.Accent end) end)
-    closeButton.MouseLeave:Connect(function() pcall(function() closeButton.BackgroundColor3 = THEME.Element end) end)
+    corner(minimizeButton, 8)
+    minimizeButton.MouseEnter:Connect(function() pcall(function() minimizeButton.BackgroundColor3 = THEME.Accent end) end)
+    minimizeButton.MouseLeave:Connect(function() pcall(function() minimizeButton.BackgroundColor3 = THEME.Element end) end)
+
+    local closeButton = new("TextButton", {
 
     -- Drag
     local dragState = { active = false }
@@ -1016,7 +1019,7 @@ RAINZXDev_UI.CreateWindow = function(opts)
     })
 
     local footer = new("TextLabel", {
-        Text = "RAINZX DEV  •  RightShift = toggle menu",
+        Text = "RAINZX DEV  •  – minimize     ✕ close",
         TextColor3 = THEME.TextDim,
         TextSize = 11,
         Font = FONT,
@@ -1027,16 +1030,11 @@ RAINZXDev_UI.CreateWindow = function(opts)
         Parent = root,
     })
 
-    -- Keybind
-    local visible = true
-    UIS.InputBegan:Connect(function(input)
-        if input.KeyCode == Enum.KeyCode.RightShift and input.UserInputType == Enum.UserInputType.Keyboard then
-            visible = not visible
-            root.Visible = visible
-        end
-    end)
-
     local closeCallback = nil
+    minimizeButton.MouseButton1Click:Connect(function()
+        if closeCallback then pcall(closeCallback) end
+        root.Visible = false
+    end)
     closeButton.MouseButton1Click:Connect(function()
         if closeCallback then pcall(closeCallback) end
         pcall(function() screen:Destroy() end)
