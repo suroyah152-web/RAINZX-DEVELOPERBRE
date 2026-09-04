@@ -31,8 +31,8 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 
--- Fallback online source for Sniper Arena if no local file. Swap for your host.
-local SNIPER_ARENA_URL = "https://raw.githubusercontent.com/PuckAFK/Sniper-Arena/main/Sniper%20Arena.lua"
+-- Fallback online source for Sniper Arena if no local file. Hosted on RAINZX DEV repo.
+local SNIPER_ARENA_URL = "https://raw.githubusercontent.com/suroyah152-web/RAINZX-DEV./main/RainzxDev_FpsHub.lua"
 local SNIPER_LOCAL_FILE = "SniperArena_Rework.lua"
 
 -- =========================
