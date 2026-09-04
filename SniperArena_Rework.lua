@@ -1,5 +1,5 @@
--- == RAINZX DEV | Sniper Arena :: REBUILD v4.0 ==
--- Rage + Legit + ESP + Chams + WalkSpeed + Auto Fire
+-- == RAINZX DEV | Sniper Arena :: REBUILD v4.1 ==
+-- Aim Silent + ESP + Chams + WalkSpeed + Auto Fire
 -- Hybrid aim:
 --   * Silent aim  (via hookfunction/EntityService)  -- dipakai bila executor punya hook
 --   * Aim lock    (putar kamera langsung, cam.CFrame = lookAt) -- FALLBACK, PASTI JALAN
@@ -20,13 +20,11 @@ task.spawn(function()
 
 	-- === Config ===
 	local cfg = {
-		mode = "Off",        -- "Off" / "Legit" / "Rage"
+		aimSilent = false,   -- ON/OFF untuk aim silent
 		aimMethod = "Auto",  -- "Auto": pakai silent aim kalau hook ada, selain itu putar kamera
 		                     -- "Camera": paksa putar kamera (paling aman)
 		headshot = true,
 		fov = 180,
-		rageFov = 500,
-		rageHead = true,     -- false = closest part (max aggression)
 		esp = false,
 		espBox = true,
 		espHealth = true,
@@ -36,14 +34,11 @@ task.spawn(function()
 		teamCheck = false,
 	}
 
-	local function isRage() return cfg.mode == "Rage" end
-	local function isLegit() return cfg.mode == "Legit" end
-	local function aimOn() return isRage() or isLegit() end
+	local function aimOn() return cfg.aimSilent end
 
 	-- Deteksi hookfunction
-	local HAS_HOOK = (type(hookfunction) == "function") and (type(camlock) ~= "table" or true)
+	local HAS_HOOK = type(hookfunction) == "function"
 	local function useSilent()
-		-- silent aim hanya kalau hook ada, mode bukan "Camera", dan servicenya ketemu
 		return (cfg.aimMethod ~= "Camera") and HAS_HOOK
 	end
 
@@ -73,9 +68,6 @@ task.spawn(function()
 
 	-- === Helpers ===
 	local function getTargetPart(char)
-		if isRage() and not cfg.rageHead then
-			return char:FindFirstChild("HumanoidRootPart")
-		end
 		local part = cfg.headshot and char:FindFirstChild("Head") or nil
 		if part and part:IsA("BasePart") then return part end
 		part = char:FindFirstChild("HumanoidRootPart")
@@ -91,7 +83,7 @@ task.spawn(function()
 		if not char then return false end
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		if not hum or hum.Health <= 0 then return false end
-		if cfg.teamCheck and not isRage() and EntityService and EntityService.GetTeamOfEntity then
+		if cfg.teamCheck and EntityService and EntityService.GetTeamOfEntity then
 			local lt = EntityService.GetTeamOfEntity(EntityService.GetLocalEntity())
 			local et = EntityService.GetTeamOfEntity(entity)
 			if lt == et then return false end
@@ -107,13 +99,12 @@ task.spawn(function()
 	end
 
 	local function getCurrentTarget()
+		if not aimOn() then return nil end
 		if not (EntityService and EntityService.GetLocalEntity) then return nil end
 		local localEntity = EntityService.GetLocalEntity()
 		if not localEntity or not localEntity.World or not localEntity.World.EntitiesByTeam then return nil end
 		local best, bestD = nil, math.huge
 		local mx, my = UIS:GetMouseLocation().X, UIS:GetMouseLocation().Y
-		local useFov = isRage() and cfg.rageFov or (isLegit() and cfg.fov or 0)
-		if not aimOn() then return nil end
 		for _, teamDict in pairs(localEntity.World.EntitiesByTeam) do
 			local items = teamDict._items or teamDict
 			for _, ent in pairs(items) do
@@ -121,19 +112,11 @@ task.spawn(function()
 				if char then
 					local part = getTargetPart(char)
 					if part then
-						if isRage() and not cfg.rageHead then
-							-- rage non-head: closest part, jarak 3D bukan FOV layar
-							local d = (Camera.CFrame.Position - part.Position).Magnitude
-							if d < bestD then
+						local sp = toScreen(part.Position)
+						if sp then
+							local d = (sp - Vector2.new(mx, my)).Magnitude
+							if d <= cfg.fov and d < bestD then
 								best, bestD = { part = part, pos = part.Position }, d
-							end
-						else
-							local sp = toScreen(part.Position)
-							if sp then
-								local d = (sp - Vector2.new(mx, my)).Magnitude
-								if d <= useFov and d < bestD then
-									best, bestD = { part = part, pos = part.Position }, d
-								end
 							end
 						end
 					end
@@ -192,18 +175,14 @@ task.spawn(function()
 	end
 
 	-- === Camera aim lock (FALLBACK - dijamin jalan di executor tanpa hook) ===
-	-- Putar kamera langsung ke target. Dipakai saat aimMethod == "Camera" ATAU
-	-- saat silent aim tidak tersedia (executor tanpa hookfunction).
 	local camLockActive = false
-	RunService.RenderStepped:Connect(function(dt)
-		-- FOV circle
+	RunService.RenderStepped:Connect(function()
 		FOVCircle.Position = UIS:GetMouseLocation()
-		FOVCircle.Radius = isRage() and cfg.rageFov or cfg.fov
+		FOVCircle.Radius = cfg.fov
 		FOVCircle.Visible = aimOn()
 
 		if not aimOn() then camLockActive = false return end
 
-		-- Putar kamera bila: mode Camera dipilih, ATAU silent aim tidak dipakai
 		local shouldCam = (cfg.aimMethod == "Camera") or (not useSilent())
 		if not shouldCam then return end
 
@@ -216,8 +195,7 @@ task.spawn(function()
 		if t then
 			camLockActive = true
 			pcall(function() Camera.CFrame = CFrame.lookAt(from, t.pos) end)
-		elseif cfg.aimMethod == "Camera" then
-			-- keep last lock when no camera-mode target changes camera
+		else
 			camLockActive = false
 		end
 	end)
@@ -372,8 +350,8 @@ task.spawn(function()
 	if not gui.Parent then gui.Parent = LP:WaitForChild("PlayerGui") end
 
 	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(0, 260, 0, 418)
-	frame.Position = UDim2.new(0.5, -130, 0.5, -195)
+	frame.Size = UDim2.new(0, 260, 0, 348)
+	frame.Position = UDim2.new(0.5, -130, 0.5, -164)
 	frame.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
 	frame.BorderSizePixel = 0
 	frame.Active = true
@@ -476,7 +454,6 @@ task.spawn(function()
 	title.TextSize = 16
 	title.Parent = frame
 
-	-- Line 1: status aim method
 	local statusTxt = Instance.new("TextLabel")
 	statusTxt.Size = UDim2.new(1, -20, 0, 18)
 	statusTxt.Position = UDim2.new(0, 10, 0, 34)
@@ -488,9 +465,7 @@ task.spawn(function()
 	statusTxt.TextXAlignment = Enum.TextXAlignment.Left
 	statusTxt.Parent = frame
 
-	cycleButton(frame, 54, "Aim Mode", { "Off", "Legit", "Rage" },
-		function() return cfg.mode end,
-		function(v) cfg.mode = v end)
+	toggleButton(frame, 54, "Aim Silent", function() return cfg.aimSilent end, function(v) cfg.aimSilent = v end)
 	cycleButton(frame, 84, "Engine", { "Auto", "Camera" },
 		function() return cfg.aimMethod end,
 		function(v) cfg.aimMethod = v end)
@@ -504,11 +479,10 @@ task.spawn(function()
 	toggleButton(frame, 234, "ESP Box", function() return cfg.espBox end, function(v) cfg.espBox = v end)
 	toggleButton(frame, 264, "ESP Health", function() return cfg.espHealth end, function(v) cfg.espHealth = v end)
 	toggleButton(frame, 294, "Chams", function() return cfg.chams end, function(v) cfg.chams = v end)
-	numeric(frame, 324, "WalkSpeed", "speed")
 
 	local close = Instance.new("TextButton")
 	close.Size = UDim2.new(1, -20, 0, 26)
-	close.Position = UDim2.new(0, 10, 0, 356)
+	close.Position = UDim2.new(0, 10, 0, 322)
 	close.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
 	close.TextColor3 = Color3.fromRGB(255, 255, 255)
 	close.Text = "Tutup Script"
@@ -525,5 +499,5 @@ task.spawn(function()
 		gui:Destroy()
 	end)
 
-	print("RAINZX DEV | Sniper Arena v4.0 loaded. Aim engine: " .. (useSilent() and "Silent Aim" or "Camera Lock"))
+	print("RAINZX DEV | Sniper Arena v4.1 loaded. Aim engine: " .. (useSilent() and "Silent Aim" or "Camera Lock"))
 end)
