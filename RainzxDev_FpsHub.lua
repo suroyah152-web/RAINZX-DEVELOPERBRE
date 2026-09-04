@@ -1,8 +1,9 @@
 --[[
     RAINZX DEV | Universal FPS Hub
     Works across FPS games: Blox Strike, Rivals, Sniper Arena, and more.
-    Aimbot + ESP + Chams + Anti-AFK.
-    Rework by RAINZX DEV.
+    Aimbot (Off/Legit/Rage) + ESP + Chams + Anti-AFK + Auto Fire.
+    Camera-rotate based (no hookfunction needed) - works on most executors.
+    Rebuilt by RAINZX DEV.
 ]]
 
 task.spawn(function()
@@ -19,7 +20,7 @@ task.spawn(function()
 
 	-- === Settings ===
 	local cfg = {
-		aimbot = false,
+		mode = "Off", -- "Off" / "Legit" / "Rage"
 		autoFire = false,
 		headshot = true,
 		fov = 180,
@@ -30,7 +31,13 @@ task.spawn(function()
 		chams = false,
 		teamCheck = true,
 		smoothness = 0.5,
+		rageFov = 500,
+		rageHead = true, -- false = closest part (max aggression)
 	}
+
+	local function isRage() return cfg.mode == "Rage" end
+	local function isLegit() return cfg.mode == "Legit" end
+	local function aimOn() return isRage() or isLegit() end
 
 	-- === Anti-AFK ===
 	do
@@ -51,6 +58,7 @@ task.spawn(function()
 
 	-- === Target helpers ===
 	local function isTeam(plr)
+		if isRage() then return false end
 		if not cfg.teamCheck then return false end
 		if not LP then return true end
 		if LP.Team == plr.Team and plr.Team ~= nil then return true end
@@ -63,6 +71,9 @@ task.spawn(function()
 	end
 
 	local function getTargetPart(char)
+		if isRage() and not cfg.rageHead then
+			return char:FindFirstChild("HumanoidRootPart")
+		end
 		local part = cfg.headshot and char:FindFirstChild("Head") or nil
 		if part and part:IsA("BasePart") then return part end
 		part = char:FindFirstChild("HumanoidRootPart")
@@ -94,11 +105,12 @@ task.spawn(function()
 	local function closestInFOV()
 		local mx, my = UIS:GetMouseLocation().X, UIS:GetMouseLocation().Y
 		local best, bestD = nil, math.huge
+		local useFov = isRage() and cfg.rageFov or cfg.fov
 		for _, t in ipairs(getAlive()) do
 			local sp = toScreen(t.part.Position)
 			if sp then
 				local d = (sp - Vector2.new(mx, my)).Magnitude
-				if d <= cfg.fov and d < bestD then
+				if d <= useFov and d < bestD then
 					best, bestD = t, d
 				end
 			end
@@ -109,19 +121,29 @@ task.spawn(function()
 	-- === Aimbot main loop ===
 	RunService.RenderStepped:Connect(function()
 		fovCircle.Position = UIS:GetMouseLocation()
-		fovCircle.Radius = cfg.fov
-		fovCircle.Visible = cfg.aimbot
+		fovCircle.Radius = isRage() and cfg.rageFov or cfg.fov
+		fovCircle.Visible = aimOn()
 
-		if cfg.aimbot then
+		if aimOn() then
 			local target = closestInFOV()
 			if target then
 				local cam = Camera
-				if cfg.smoothness > 0 and cfg.smoothness <= 1 then
-					local current = cam.CFrame
-					local goal = CFrame.lookAt(current.Position, target.part.Position)
-					cam.CFrame = current:Lerp(goal, cfg.smoothness)
-				else
+				if isRage() then
 					cam.CFrame = CFrame.lookAt(cam.Position, target.part.Position)
+					if cfg.autoFire then
+						pcall(function() mouse1click() end)
+					end
+				else
+					if cfg.smoothness > 0 and cfg.smoothness <= 1 then
+						local current = cam.CFrame
+						local goal = CFrame.lookAt(current.Position, target.part.Position)
+						cam.CFrame = current:Lerp(goal, cfg.smoothness)
+					else
+						cam.CFrame = CFrame.lookAt(cam.Position, target.part.Position)
+					end
+					if cfg.autoFire then
+						pcall(function() mouse1click() end)
+					end
 				end
 			end
 		end
@@ -308,6 +330,30 @@ task.spawn(function()
 		refresh()
 	end
 
+	local function cycle(parent, y, label, options, key)
+		local f = section(parent, y, 26)
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, 0, 1, 0)
+		btn.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.Font = Enum.Font.SourceSans
+		btn.TextSize = 14
+		btn.Parent = f
+		local function refresh()
+			local cur = cfg[key]
+			btn.Text = label .. ": " .. tostring(cur)
+			btn.BackgroundColor3 = (cur == options[1]) and Color3.fromRGB(0, 150, 70) or Color3.fromRGB(55, 55, 60)
+		end
+		btn.MouseButton1Click:Connect(function()
+			local cur = cfg[key]
+			local idx = 0
+			for i, o in ipairs(options) do if o == cur then idx = i break end end
+			cfg[key] = options[(idx % #options) + 1]
+			refresh()
+		end)
+		refresh()
+	end
+
 	local function numeric(parent, y, label, key, apply)
 		local f = section(parent, y, 26)
 		local lbl = Instance.new("TextLabel")
@@ -334,21 +380,21 @@ task.spawn(function()
 		end)
 	end
 
-	toggle(frame, 38, "Aimbot", "aimbot")
-	toggle(frame, 70, "Auto Fire", "autoFire")
-	toggle(frame, 102, "Headshot", "headshot")
-	numeric(frame, 134, "FOV", "fov")
-	numeric(frame, 166, "Smoothness", "smoothness")
-	toggle(frame, 198, "ESP", "esp", function() if not cfg.esp then hideAllESP() end end)
-	toggle(frame, 230, "ESP Box", "espBox")
-	toggle(frame, 262, "ESP Health", "espHealth")
-	toggle(frame, 294, "ESP Name", "espName")
-	toggle(frame, 326, "Chams", "chams")
-	toggle(frame, 358, "Team Check", "teamCheck")
+	cycle(frame, 36, "Aim Mode", { "Off", "Legit", "Rage" }, "mode")
+	toggle(frame, 68, "Auto Fire", "autoFire")
+	toggle(frame, 100, "Headshot", "headshot")
+	numeric(frame, 132, "FOV", "fov")
+	numeric(frame, 164, "Smoothness", "smoothness")
+	toggle(frame, 196, "ESP", "esp", function() if not cfg.esp then hideAllESP() end end)
+	toggle(frame, 228, "ESP Box", "espBox")
+	toggle(frame, 260, "ESP Health", "espHealth")
+	toggle(frame, 292, "ESP Name", "espName")
+	toggle(frame, 324, "Chams", "chams")
+	toggle(frame, 356, "Team Check", "teamCheck")
 
 	local close = Instance.new("TextButton")
-	close.Size = UDim2.new(1, -20, 0, 24)
-	close.Position = UDim2.new(0, 10, 0, 392)
+	close.Size = UDim2.new(1, -20, 0, 18)
+	close.Position = UDim2.new(0, 10, 0, 382)
 	close.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
 	close.TextColor3 = Color3.fromRGB(255, 255, 255)
 	close.Text = "Tutup Script"
