@@ -175,8 +175,8 @@ enableAntiAFK()
 
 local SNIPER_ARENA_ROUTE = {
     name = "Sniper Arena",
-    source = "RAINZX-DEVELOPERBRE/SniperArena_Rework.lua",
-    url = BASE_URL .. "SniperArena_Rework.lua",
+    source = "RAINZX-DEVELOPERBRE/AimbotRage_FullBuild.lua",
+    url = BASE_URL .. "AimbotRage_FullBuild.lua",
 }
 
 local ONE_TAP_ROUTE = {
