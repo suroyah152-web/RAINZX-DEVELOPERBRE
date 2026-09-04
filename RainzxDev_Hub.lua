@@ -22,7 +22,9 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 
 -- Hosting root (RAINZX DEV GitHub repo)
-local RAW_ROOT = "https://raw.githubusercontent.com/suroyah152-web/RAINZX-DEV./main/"
+-- The repo name ends with a period ("RAINZX-DEV."); raw.githubusercontent requires
+-- that trailing dot percent-encoded (%2E) or it returns 404. Fixed across all routes.
+local RAW_ROOT = "https://raw.githubusercontent.com/suroyah152-web/RAINZX-DEV%2E/main/"
 
 -- =========================
 -- Universal Anti-AFK
@@ -67,7 +69,7 @@ enableAntiAFK()
 -- =========================
 local SNIPER = {
 	name = "Sniper Arena",
-	url = RAW_ROOT .. "RainzxDev_FpsHub.lua",
+	url = RAW_ROOT .. "SniperArena_Rework.lua",
 }
 
 -- Sniper Arena universe + subplaces
@@ -81,7 +83,6 @@ local ROUTES = {
 }
 
 local MATCH = {
-	-- FPS games resolve through the universal FPS hub, plus any known place ids.
 	["Sniper Arena"] = SNIPER,
 }
 
