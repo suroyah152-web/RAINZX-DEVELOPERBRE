@@ -22,9 +22,7 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualUser = game:GetService("VirtualUser")
 
 -- Hosting root (RAINZX DEV GitHub repo)
--- The repo name ends with a period ("RAINZX-DEV."); raw.githubusercontent requires
--- that trailing dot percent-encoded (%2E) or it returns 404. Fixed across all routes.
-local RAW_ROOT = "https://raw.githubusercontent.com/suroyah152-web/RAINZX-DEV%2E/main/"
+local RAW_ROOT = "https://raw.githubusercontent.com/suroyah152-web/RAINZX-DEVELOPERBRE/main/"
 
 -- =========================
 -- Universal Anti-AFK
