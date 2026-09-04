@@ -1,9 +1,8 @@
 --[[
     RAINZX DEV | Universal FPS Hub
     Works across FPS games: Blox Strike, Rivals, Sniper Arena, and more.
-    Aimbot (Off/Legit/Rage) + ESP + Chams + Anti-AFK + Auto Fire.
-    Camera-rotate based (no hookfunction needed) - works on most executors.
-    Rebuilt by RAINZX DEV.
+    Aimbot + ESP + Chams + Anti-AFK.
+    Rework by RAINZX DEV.
 ]]
 
 task.spawn(function()
