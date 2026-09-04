@@ -69,7 +69,10 @@ enableAntiAFK()
 -- =========================
 local SNIPER = {
 	name = "Sniper Arena",
-	url = RAW_ROOT .. "SniperArena_Rework.lua",
+	-- Uses the camera-rotate FPS hub (works without hookfunction), which now
+	-- includes a full Rage mode. The dedicated silent-aim rework needs a
+	-- hook-capable executor, so the hub defaults to the compatible build.
+	url = RAW_ROOT .. "RainzxDev_FpsHub.lua",
 }
 
 -- Sniper Arena universe + subplaces
