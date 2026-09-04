@@ -1,1021 +1,1184 @@
--- == RAINZX DEV | Sniper Arena :: RAGE v5.0 ==
--- Rage Aimbot (engine PuckAFK-style) + ESP + Chams + WalkSpeed + Auto Fire
--- Teknik aimbot rage diambil dari source PuckAFK milik pengguna:
---   * Prediction (velocity lead) + lerp velocity smoothing
---   * Sticky target + grace lock + switch threshold
---   * FOV besar, closest-part / head aim, snap instan, ignore visibilitas
---   * mousemoverel (kalau ada) ATAU cam.CFrame lerp (fallback - PASTI JALAN)
--- Diadaptasi ke sistem EntityService Sniper Arena oleh RAINZX DEV.
--- Branding RAINZX DEV.
+--[[
+    RAINZX DEV - Responsive Release Loader
+
+    Supported places:
+      Get Rich ASAP          : 128481067661991
+      Chicken Farm           : 137233438285284
+      SevenM Hood            : 131558436575033
+      +1 Speed Monkey Escape : 114697347887839
+      +1 Power Per Click     : 74889851913797
+      Dig & Clean             : 83038462357724
+      Magic Loot             : 133188236593503
+      Sniper Arena universe  : GameId 9534705677 (all current/future subplaces)
+      One Tap universe       : GameId 9294074907 (root PlaceId 90568084448279)
+      Kick a Lucky Block     : GameId 10004244222 (root PlaceId 89469502395769)
+      Murder Mystery 2       : 142823291
+      Build a Gun Army        : 134162299584012
+
+    One free loader for all supported RAINZX DEV scripts.
+    Includes automatic PlaceId + universe detection, a manual script dropdown, and universal anti-AFK.
+]]
+
+local ENV = (getgenv and getgenv()) or _G
+
+ENV.__RAINZXDEV_CONFIG_SHARED_STATE =
+    ENV.__RAINZXDEV_CONFIG_SHARED_STATE
+    or {
+        Root = "RAINZXDEV/Configs",
+        AutoSaveDefault = true,
+        AutoLoadDefault = true,
+    }
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+local HttpService = game:GetService("HttpService")
+
+ENV.__RAINZXDEV_UI_SHARED_STATE = ENV.__RAINZXDEV_UI_SHARED_STATE or {
+    ToggleKeyName = "K",
+    LayoutMode = "Auto",
+    UIScalePercent = 100,
+}
+
+local SHARED_UI_STATE = ENV.__RAINZXDEV_UI_SHARED_STATE
+SHARED_UI_STATE.LayoutMode = tostring(SHARED_UI_STATE.LayoutMode or "Auto")
+SHARED_UI_STATE.UIScalePercent = math.clamp(tonumber(SHARED_UI_STATE.UIScalePercent) or 100, 75, 125)
+
+local function normalizeLayoutMode(value)
+    local lowered = string.lower(tostring(value or "Auto"))
+    if lowered == "phone" or lowered == "mobile" then
+        return "Phone"
+    elseif lowered == "desktop" or lowered == "pc" then
+        return "Desktop"
+    end
+    return "Auto"
+end
+
+local function getViewportSize()
+    local camera = workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+    if viewport.X < 1 or viewport.Y < 1 then
+        return Vector2.new(1280, 720)
+    end
+    return viewport
+end
+
+local function resolveLayoutMode(mode, viewport)
+    mode = normalizeLayoutMode(mode)
+    if mode ~= "Auto" then
+        return mode
+    end
+    viewport = viewport or getViewportSize()
+    local smallViewport = viewport.X < 760 or viewport.Y < 500
+    local touchPhone = UserInputService.TouchEnabled and math.min(viewport.X, viewport.Y) <= 720
+    return (smallViewport or touchPhone) and "Phone" or "Desktop"
+end
+
+local function loadSharedUIPreferences()
+    if type(readfile) ~= "function" or type(isfile) ~= "function" then
+        return
+    end
+
+    local root = tostring((ENV.__RAINZXDEV_CONFIG_SHARED_STATE or {}).Root or "RAINZXDEV/Configs")
+    local path = root .. "/_ui_layout.json"
+    local okExists, exists = pcall(isfile, path)
+    if not okExists or not exists then
+        return
+    end
+
+    local okRead, text = pcall(readfile, path)
+    if not okRead or type(text) ~= "string" then
+        return
+    end
+
+    local okDecode, data = pcall(function()
+        return HttpService:JSONDecode(text)
+    end)
+    if not okDecode or type(data) ~= "table" then
+        return
+    end
+
+    SHARED_UI_STATE.LayoutMode = normalizeLayoutMode(data.LayoutMode or SHARED_UI_STATE.LayoutMode)
+    SHARED_UI_STATE.UIScalePercent = math.clamp(
+        tonumber(data.UIScalePercent) or SHARED_UI_STATE.UIScalePercent or 100,
+        75,
+        125
+    )
+end
+
+loadSharedUIPreferences()
+
+
+-- =========================
+-- Universal Anti-AFK
+-- =========================
+
+local function getGlobalEnvironment()
+    if type(getgenv) == "function" then
+        local ok, env = pcall(getgenv)
+        if ok and type(env) == "table" then
+            return env
+        end
+    end
+    return _G
+end
+
+local GLOBAL_ENV = getGlobalEnvironment()
+local ANTI_AFK_KEY = "__RAINZXDEV_LOADER_ANTI_AFK"
+
+local function enableAntiAFK()
+    local oldState = GLOBAL_ENV[ANTI_AFK_KEY]
+    if type(oldState) == "table" and oldState.Connection then
+        pcall(function()
+            oldState.Connection:Disconnect()
+        end)
+    end
+
+    local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
+    local connection = player.Idled:Connect(function()
+        pcall(function()
+            VirtualUser:CaptureController()
+        end)
+
+        pcall(function()
+            VirtualUser:ClickButton2(Vector2.new(0, 0))
+        end)
+
+        pcall(function()
+            local camera = workspace.CurrentCamera
+            local cameraCFrame = camera and camera.CFrame or CFrame.new()
+            VirtualUser:Button2Down(Vector2.new(0, 0), cameraCFrame)
+            task.wait(0.05)
+            VirtualUser:Button2Up(Vector2.new(0, 0), cameraCFrame)
+        end)
+    end)
+
+    GLOBAL_ENV[ANTI_AFK_KEY] = {
+        Connection = connection,
+        Enabled = true,
+    }
+end
+
+enableAntiAFK()
+
+
+-- =========================
+-- Route Table
+-- =========================
+
+local SNIPER_ARENA_ROUTE = {
+    name = "Sniper Arena",
+    source = "github.com/PuckAFK/Sniper-Arena",
+    url = "https://raw.githubusercontent.com/PuckAFK/Sniper-Arena/main/Sniper%20Arena.lua",
+}
+
+local ONE_TAP_ROUTE = {
+    name = "One Tap",
+    source = "github.com/PuckAFK/One-Tap",
+    url = "https://raw.githubusercontent.com/PuckAFK/One-Tap/main/onetap.lua",
+}
+
+local KICK_A_LUCKY_BLOCK_ROUTE = {
+    name = "Kick a Lucky Block",
+    source = "github.com/PuckAFK/Kick-a-Lucky-Block",
+    url = "https://raw.githubusercontent.com/PuckAFK/Kick-a-Lucky-Block/main/Kick%20a%20Lucky%20Block.lua",
+}
+
+local UNIVERSE_ROUTES = {
+    [9534705677] = SNIPER_ARENA_ROUTE,
+    [9294074907] = ONE_TAP_ROUTE,
+    [10004244222] = KICK_A_LUCKY_BLOCK_ROUTE,
+}
+
+local ROUTES = {
+    [90568084448279] = ONE_TAP_ROUTE,
+    [89469502395769] = KICK_A_LUCKY_BLOCK_ROUTE,
+    [83038462357724] = {
+        name = "Dig & Clean",
+        source = "github.com/PuckAFK/Dig-Clean-",
+        url = "https://raw.githubusercontent.com/PuckAFK/Dig-Clean-/main/Dig%20%26%20Clean.lua",
+    },
+    [134162299584012] = {
+        name = "Build a Gun Army",
+        source = "RAINZX DEV/scripts/build-a-gun-army/autofarm.lua",
+        url = "https://RAINZX DEV.site/scripts/build-a-gun-army/autofarm.lua",
+    },
+    [142823291] = {
+        name = "Murder Mystery 2",
+        source = "RAINZX DEV.site/scripts/murder-mystery-2/mm2.lua",
+        url = "https://RAINZX DEV.site/scripts/murder-mystery-2/mm2.lua",
+    },
+    [74889851913797] = {
+        name = "+1 Power Per Click",
+        source = "github.com/PuckAFK/-1-Power-Per-Click",
+        url = "https://raw.githubusercontent.com/PuckAFK/-1-Power-Per-Click/main/%2B1%20Power%20Per%20Click.lua",
+    },
+    [133188236593503] = {
+        name = "Magic Loot",
+        source = "RAINZX DEV.site/scripts/magic-loot/autofarm.lua",
+        url = "https://RAINZX DEV.site/scripts/magic-loot/autofarm.lua",
+    },
+    [128481067661991] = {
+        name = "Get Rich ASAP",
+        source = "github.com/PuckAFK/Get-rich-asap",
+        url = "https://raw.githubusercontent.com/PuckAFK/Get-rich-asap/main/Get%20Rich%20Asap%20Script",
+    },
+    [137233438285284] = {
+        name = "Chicken Farm",
+        source = "github.com/PuckAFK/Chicken-Farm-Auto",
+        url = "https://raw.githubusercontent.com/PuckAFK/Chicken-Farm-Auto/main/Chicken%20Empire",
+    },
+    [131558436575033] = {
+        name = "SevenM Hood",
+        source = "github.com/PuckAFK/SevenM-Hood",
+        url = "https://raw.githubusercontent.com/PuckAFK/SevenM-Hood/main/aim.lua",
+    },
+    [114697347887839] = {
+        name = "+1 Speed Monkey Escape",
+        source = "github.com/PuckAFK/1-Speed-Monkey-Escape",
+        url = "https://raw.githubusercontent.com/PuckAFK/1-Speed-Monkey-Escape/main/1%20Speed%20Monkey%20Escape.lua",
+    },
+    [122446657157717] = SNIPER_ARENA_ROUTE,
+    [119259569670784] = SNIPER_ARENA_ROUTE,
+}
+
+
+-- =========================
+-- Theme & UI Utilities
+-- =========================
+
+local THEME = {
+    Main = Color3.fromRGB(12, 12, 12),
+    Top = Color3.fromRGB(12, 12, 12),
+    Tab = Color3.fromRGB(12, 12, 12),
+    Section = Color3.fromRGB(18, 18, 18),
+    SectionInner = Color3.fromRGB(18, 18, 18),
+    Element = Color3.fromRGB(24, 24, 24),
+    ElementHover = Color3.fromRGB(32, 32, 32),
+    Border = Color3.fromRGB(45, 45, 45),
+    BorderDark = Color3.fromRGB(5, 5, 5),
+    Text = Color3.fromRGB(170, 170, 170),
+    DimText = Color3.fromRGB(100, 100, 100),
+    BrightText = Color3.fromRGB(230, 230, 230),
+    Accent = Color3.fromRGB(0, 95, 255),
+    Danger = Color3.fromRGB(180, 58, 64),
+    Success = Color3.fromRGB(48, 145, 78),
+}
+
+local function create(className, properties)
+    local object = Instance.new(className)
+    local viewport = getViewportSize()
+    local phoneLayout = resolveLayoutMode(SHARED_UI_STATE.LayoutMode, viewport) == "Phone"
+
+    for key, value in pairs(properties or {}) do
+        if key == "TextSize" and phoneLayout and type(value) == "number" then
+            object[key] = math.floor(value * 1.10 + 0.5)
+        else
+            object[key] = value
+        end
+    end
+
+    return object
+end
+
+local function tween(object, duration, properties, style, direction)
+    local animation = TweenService:Create(
+        object,
+        TweenInfo.new(
+            duration or 0.12,
+            style or Enum.EasingStyle.Quad,
+            direction or Enum.EasingDirection.Out
+        ),
+        properties
+    )
+    animation:Play()
+    return animation
+end
+
+local function codeLabel(parent, text, size, color, zIndex)
+    return create("TextLabel", {
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Text = tostring(text or ""),
+        TextColor3 = color or THEME.Text,
+        TextSize = size or 12,
+        Font = Enum.Font.Code,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        ZIndex = zIndex or 10,
+        Parent = parent,
+    })
+end
+
+local function getGuiParent(screenGui)
+    local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
+    local playerGui = player:FindFirstChildOfClass("PlayerGui")
+    if not playerGui then
+        playerGui = player:WaitForChild("PlayerGui", 10)
+    end
+    if playerGui then
+        local ok = pcall(function()
+            screenGui.Parent = playerGui
+        end)
+        if ok and screenGui.Parent == playerGui then
+            return playerGui
+        end
+    end
+    if type(gethui) == "function" then
+        local ok, target = pcall(gethui)
+        if ok and target then
+            local parented = pcall(function()
+                screenGui.Parent = target
+            end)
+            if parented then
+                return target
+            end
+        end
+    end
+    return nil
+end
+
+local function removeOld()
+    local possibleParents = {CoreGui}
+    local player = Players.LocalPlayer
+    if player then
+        local playerGui = player:FindFirstChildOfClass("PlayerGui")
+        if playerGui then
+            table.insert(possibleParents, playerGui)
+        end
+    end
+    if type(gethui) == "function" then
+        local ok, result = pcall(gethui)
+        if ok and result then
+            table.insert(possibleParents, result)
+        end
+    end
+    for _, parent in ipairs(possibleParents) do
+        pcall(function()
+            local old = parent:FindFirstChild("RAINZXDEVLoader")
+            if old then
+                old:Destroy()
+            end
+        end)
+    end
+end
+
+removeOld()
+
+
+-- =========================
+-- GUI Setup
+-- =========================
+
+local gui = create("ScreenGui", {
+    Name = "RAINZXDEVLoader",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    DisplayOrder = 10000,
+})
+
+getGuiParent(gui)
+
+local WINDOW_WIDTH = 480
+local WINDOW_HEIGHT = 260
+local EXPANDED_HEIGHT = 365
+local LOADER_LAYOUT = "Desktop"
+local LOADER_EXPANDED = false
+local LOADER_SCALE = 1
+
+local function calculateLoaderLayout()
+    local viewport = getViewportSize()
+    local resolved = resolveLayoutMode(SHARED_UI_STATE.LayoutMode, viewport)
+    local phoneLayout = resolved == "Phone"
+    local landscape = viewport.X > viewport.Y
+
+    if phoneLayout then
+        WINDOW_WIDTH = landscape and 500 or 350
+        WINDOW_HEIGHT = landscape and 235 or 260
+        EXPANDED_HEIGHT = landscape and 350 or 365
+    else
+        WINDOW_WIDTH = 480
+        WINDOW_HEIGHT = 260
+        EXPANDED_HEIGHT = 365
+    end
+
+    local requestedScale = math.clamp(tonumber(SHARED_UI_STATE.UIScalePercent) or 100, 75, 125) / 100
+    local fitScale = math.min(
+        (viewport.X - 16) / math.max(WINDOW_WIDTH, 1),
+        (viewport.Y - 16) / math.max(EXPANDED_HEIGHT, 1)
+    )
+
+    LOADER_LAYOUT = resolved
+    LOADER_SCALE = math.max(0.65, math.min(requestedScale, fitScale))
+end
+
+calculateLoaderLayout()
+local targetCardSize = UDim2.fromOffset(WINDOW_WIDTH, WINDOW_HEIGHT)
+
+local shadow = create("Frame", {
+    Name = "Shadow",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0.5, 4, 0.5, 4),
+    Size = targetCardSize,
+    BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+    BackgroundTransparency = 0.5,
+    BorderSizePixel = 0,
+    ZIndex = 1,
+    Parent = gui,
+})
+
+local card = create("CanvasGroup", {
+    Name = "LoaderCard",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = targetCardSize,
+    BackgroundColor3 = THEME.Main,
+    BackgroundTransparency = 0,
+    BorderColor3 = THEME.BorderDark,
+    BorderSizePixel = 1,
+    GroupTransparency = 1,
+    Active = true,
+    ZIndex = 2,
+    Parent = gui,
+})
+
+local cardScale = create("UIScale", {Scale = LOADER_SCALE, Parent = card})
+local shadowScale = create("UIScale", {Scale = LOADER_SCALE, Parent = shadow})
+
+local function applyLoaderResponsiveLayout()
+    if not gui.Parent then return end
+    calculateLoaderLayout()
+    targetCardSize = UDim2.fromOffset(WINDOW_WIDTH, WINDOW_HEIGHT)
+    cardScale.Scale = LOADER_SCALE
+    shadowScale.Scale = LOADER_SCALE
+    local desired = LOADER_EXPANDED
+        and UDim2.fromOffset(WINDOW_WIDTH, EXPANDED_HEIGHT)
+        or targetCardSize
+    card.Size = desired
+    shadow.Size = desired
+end
+
+local viewportConnection = nil
+local function attachViewportListener()
+    if viewportConnection then
+        pcall(function() viewportConnection:Disconnect() end)
+        viewportConnection = nil
+    end
+    local camera = workspace.CurrentCamera
+    if camera then
+        viewportConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+            task.defer(applyLoaderResponsiveLayout)
+        end)
+    end
+end
+
+attachViewportListener()
+local cameraConnection = workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+    attachViewportListener()
+    task.defer(applyLoaderResponsiveLayout)
+end)
+
+gui.AncestryChanged:Connect(function(_, parent)
+    if parent == nil then
+        if viewportConnection then pcall(function() viewportConnection:Disconnect() end) end
+        if cameraConnection then pcall(function() cameraConnection:Disconnect() end) end
+    end
+end)
+
+
+-- =========================
+-- Rose Background (Procedural RAINZX DEV)
+-- =========================
+
+local roseBackground = create("CanvasGroup", {
+    Name = "RoseBackground",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+    GroupTransparency = 0.78,
+    ZIndex = 3,
+    Parent = card,
+})
+
+local roseColor = Color3.fromRGB(255, 255, 255)
+
+local function softPart(parent, position, anchor, size, rotation, transparency)
+    local part = create("Frame", {
+        AnchorPoint = anchor or Vector2.new(0.5, 0.5),
+        Position = position,
+        Size = size,
+        Rotation = rotation or 0,
+        BackgroundColor3 = roseColor,
+        BackgroundTransparency = transparency or 0.84,
+        BorderSizePixel = 0,
+        ZIndex = 3,
+        Parent = parent,
+    })
+    create("UICorner", {CornerRadius = UDim.new(1, 0), Parent = part})
+    return part
+end
+
+local function createRose(x, y, scale, tilt)
+    local motif = create("Frame", {
+        Position = UDim2.fromOffset(x - 36, y - 36),
+        Size = UDim2.fromOffset(72, 72),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Rotation = tilt or 0,
+        ZIndex = 3,
+        Parent = roseBackground,
+    })
+    local center = UDim2.fromScale(0.5, 0.43)
+    for index = 0, 5 do
+        softPart(motif, center, Vector2.new(0.5, 0.92),
+            UDim2.fromOffset(math.max(6, math.floor(13 * scale)), math.max(12, math.floor(24 * scale))),
+            index * 60, 0.78)
+    end
+    for index = 0, 4 do
+        softPart(motif, center, Vector2.new(0.5, 0.90),
+            UDim2.fromOffset(math.max(4, math.floor(9 * scale)), math.max(8, math.floor(16 * scale))),
+            index * 72 + 36, 0.72)
+    end
+    softPart(motif, center, Vector2.new(0.5, 0.5), UDim2.fromOffset(4, 4), 0, 0.62)
+    softPart(motif, UDim2.new(0.5, -5, 0.68, 0), Vector2.new(1, 0.5), UDim2.fromOffset(17, 4), -32, 0.80)
+    softPart(motif, UDim2.new(0.5, 5, 0.71, 0), Vector2.new(0, 0.5), UDim2.fromOffset(17, 4), 32, 0.80)
+    local stem = create("Frame", {
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0.60, 0),
+        Size = UDim2.fromOffset(1, 24),
+        BackgroundColor3 = roseColor,
+        BackgroundTransparency = 0.78,
+        BorderSizePixel = 0,
+        ZIndex = 2,
+        Parent = motif,
+    })
+    create("UIGradient", {
+        Rotation = 90,
+        Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.12),
+            NumberSequenceKeypoint.new(1, 1),
+        }),
+        Parent = stem,
+    })
+end
+
+createRose(74, 112, 0.68, -7)
+createRose(220, 176, 0.60, 7)
+createRose(385, 105, 0.64, -5)
+createRose(448, 218, 0.52, 8)
+
+
+-- =========================
+-- Title Bar + Close + Drag
+-- =========================
+
+create("Frame", {
+    Name = "InnerBorder",
+    Position = UDim2.fromOffset(1, 1),
+    Size = UDim2.new(1, -2, 1, -2),
+    BackgroundTransparency = 1,
+    BorderColor3 = THEME.Border,
+    BorderSizePixel = 1,
+    ZIndex = 4,
+    Parent = card,
+})
+
+local titleBar = create("Frame", {
+    Name = "TitleBar",
+    Position = UDim2.fromOffset(2, 2),
+    Size = UDim2.new(1, -4, 0, 24),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ZIndex = 8,
+    Parent = card,
+})
+
+local titleLabel = codeLabel(titleBar, "RAINZX DEV", 13, THEME.BrightText, 11)
+titleLabel.Position = UDim2.fromOffset(6, 0)
+titleLabel.Size = UDim2.new(1, -92, 1, 0)
+
+local cancelled = false
+
+local closeButton = create("TextButton", {
+    Name = "Close",
+    AnchorPoint = Vector2.new(1, 0),
+    Position = UDim2.new(1, -2, 0, 2),
+    Size = UDim2.fromOffset(18, 19),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Font = Enum.Font.Code,
+    Text = "x",
+    TextSize = 12,
+    TextColor3 = THEME.DimText,
+    ZIndex = 15,
+    Parent = titleBar,
+})
+
+closeButton.MouseEnter:Connect(function()
+    tween(closeButton, 0.08, {TextColor3 = THEME.BrightText})
+end)
+closeButton.MouseLeave:Connect(function()
+    tween(closeButton, 0.08, {TextColor3 = THEME.DimText})
+end)
+closeButton.MouseButton1Click:Connect(function()
+    cancelled = true
+    pcall(function() gui:Destroy() end)
+end)
+
+local dragHandle = create("TextButton", {
+    Name = "DragHandle",
+    Position = UDim2.fromOffset(0, 0),
+    Size = UDim2.new(1, -42, 1, 0),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+    Text = "",
+    Active = true,
+    ZIndex = 14,
+    Parent = titleBar,
+})
+
+local dragging = false
+local dragStart = nil
+local startPosition = nil
+
+dragHandle.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPosition = card.Position
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if not dragging or not dragStart or not startPosition then return end
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch then
+        local delta = input.Position - dragStart
+        card.Position = UDim2.new(
+            startPosition.X.Scale, startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+        )
+        shadow.Position = UDim2.new(
+            card.Position.X.Scale, card.Position.X.Offset + 4,
+            card.Position.Y.Scale, card.Position.Y.Offset + 4
+        )
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+
+-- =========================
+-- Content Area
+-- =========================
+
+local accentTop = create("Frame", {
+    Name = "AccentTop",
+    Position = UDim2.fromOffset(2, 26),
+    Size = UDim2.new(1, -4, 0, 1),
+    BackgroundColor3 = THEME.Accent,
+    BorderSizePixel = 0,
+    ZIndex = 9,
+    Parent = card,
+})
+
+local contentHost = create("Frame", {
+    Name = "ContentHost",
+    AnchorPoint = Vector2.new(0.5, 0),
+    Position = UDim2.new(0.5, 0, 0, 58),
+    Size = UDim2.new(1, LOADER_LAYOUT == "Phone" and -28 or -48, 0, 132),
+    BackgroundTransparency = 1,
+    BorderSizePixel = 0,
+    ClipsDescendants = true,
+    ZIndex = 6,
+    Parent = card,
+})
+
+local section = create("Frame", {
+    Name = "LoaderSection",
+    Size = UDim2.fromScale(1, 1),
+    BackgroundColor3 = THEME.Section,
+    BorderColor3 = THEME.Border,
+    BorderSizePixel = 1,
+    ZIndex = 7,
+    Parent = contentHost,
+})
+
+create("Frame", {
+    Position = UDim2.fromOffset(1, 1),
+    Size = UDim2.new(1, -2, 1, -2),
+    BackgroundTransparency = 1,
+    BorderColor3 = THEME.BorderDark,
+    BorderSizePixel = 1,
+    ZIndex = 8,
+    Parent = section,
+})
+
+local status = codeLabel(section, "Starting...", 13, THEME.BrightText, 11)
+status.Position = UDim2.fromOffset(14, 22)
+status.Size = UDim2.new(1, -28, 0, 30)
+status.TextXAlignment = Enum.TextXAlignment.Center
+
+local detail = codeLabel(section, "Preparing RAINZX DEV loader...", 11, THEME.DimText, 11)
+detail.Position = UDim2.fromOffset(14, 53)
+detail.Size = UDim2.new(1, -28, 0, 18)
+detail.TextXAlignment = Enum.TextXAlignment.Center
+detail.TextTruncate = Enum.TextTruncate.AtEnd
+
+local progressTrack = create("Frame", {
+    AnchorPoint = Vector2.new(0.5, 0),
+    Position = UDim2.new(0.5, 0, 0, 83),
+    Size = UDim2.new(1, -84, 0, 10),
+    BackgroundColor3 = THEME.Element,
+    BorderColor3 = THEME.BorderDark,
+    BorderSizePixel = 1,
+    ClipsDescendants = true,
+    ZIndex = 10,
+    Parent = section,
+})
+
+create("Frame", {
+    Position = UDim2.fromOffset(1, 1),
+    Size = UDim2.new(1, -2, 1, -2),
+    BackgroundTransparency = 1,
+    BorderColor3 = THEME.Border,
+    BorderSizePixel = 1,
+    ZIndex = 11,
+    Parent = progressTrack,
+})
+
+local progressFill = create("Frame", {
+    Size = UDim2.fromScale(0, 1),
+    BackgroundColor3 = THEME.Accent,
+    BorderSizePixel = 0,
+    ZIndex = 10,
+    Parent = progressTrack,
+})
+
+local autoText = codeLabel(section, "automatic script detection", 9, THEME.DimText, 10)
+autoText.Position = UDim2.fromOffset(14, 102)
+autoText.Size = UDim2.new(1, -28, 0, 14)
+autoText.TextXAlignment = Enum.TextXAlignment.Center
+
+
+-- =========================
+-- Progress & Status Helpers
+-- =========================
+
+local progressValue = 0
+local changingStatus = false
+
+local function setProgress(value)
+    if cancelled then return end
+    value = math.clamp(tonumber(value) or 0, 0, 1)
+    progressValue = value
+    tween(progressFill, 0.20, {Size = UDim2.fromScale(value, 1)})
+end
+
+local function setStatus(mainText, detailText, color)
+    if cancelled or not status.Parent or not detail.Parent then return end
+    while changingStatus and not cancelled do task.wait() end
+    if cancelled then return end
+    changingStatus = true
+    local mainValue = tostring(mainText or "RAINZX DEV")
+    local detailValue = tostring(detailText or "")
+    local mainChanged = status.Text ~= mainValue
+    if mainChanged then
+        local fade = tween(status, 0.06, {TextTransparency = 1})
+        fade.Completed:Wait()
+    end
+    if cancelled or not status.Parent then
+        changingStatus = false
+        return
+    end
+    status.Text = mainValue
+    status.TextColor3 = color or THEME.BrightText
+    detail.Text = detailValue
+    if mainChanged then
+        tween(status, 0.08, {TextTransparency = 0})
+    end
+    changingStatus = false
+end
+
+local function fail(stage, message)
+    if cancelled then return end
+    progressFill.BackgroundColor3 = THEME.Danger
+    accentTop.BackgroundColor3 = THEME.Danger
+    autoText.Text = "loader error"
+    autoText.TextColor3 = THEME.Danger
+    setStatus("Load Failed",
+        tostring(stage or "Loader Error") .. " • " .. tostring(message or "Unknown error"),
+        THEME.BrightText)
+end
+
+local function fetchSource(url)
+    local ok, result = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if ok and type(result) == "string" and #result > 0 then
+        return true, result
+    end
+    local requestFunction =
+        type(request) == "function" and request
+        or type(http_request) == "function" and http_request
+        or (syn and type(syn.request) == "function" and syn.request or nil)
+        or (http and type(http.request) == "function" and http.request or nil)
+    if type(requestFunction) == "function" then
+        local requestOk, response = pcall(requestFunction, {
+            Url = url, Method = "GET",
+        })
+        if requestOk and type(response) == "table" then
+            local body = response.Body or response.body
+            local code = response.StatusCode or response.Status or response.status
+            if type(body) == "string" and #body > 0 and (not code or tonumber(code) == 200) then
+                return true, body
+            end
+        end
+    end
+    return false, result or "HTTP request unavailable"
+end
+
+
+-- =========================
+-- Manual Script Picker (Dropdown)
+-- =========================
+
+local function chooseRouteManually(placeId)
+    if cancelled then return nil end
+    setStatus("Choose a Script", "Automatic detection did not find this game")
+    setProgress(0.30)
+
+    local picker = create("CanvasGroup", {
+        Name = "ManualDropdown",
+        Position = UDim2.fromOffset(28, 100),
+        Size = UDim2.new(1, -56, 0, 34),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        GroupTransparency = 1,
+        ZIndex = 40,
+        Parent = section,
+    })
+
+    local selector = create("TextButton", {
+        Name = "Selector",
+        Size = UDim2.new(1, 0, 0, 30),
+        BackgroundColor3 = THEME.Element,
+        BorderColor3 = THEME.BorderDark,
+        BorderSizePixel = 1,
+        AutoButtonColor = false,
+        Font = Enum.Font.Code,
+        Text = "  select script...",
+        TextColor3 = THEME.Text,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ZIndex = 42,
+        Parent = picker,
+    })
+
+    create("Frame", {
+        Position = UDim2.fromOffset(1, 1),
+        Size = UDim2.new(1, -2, 1, -2),
+        BackgroundTransparency = 1,
+        BorderColor3 = THEME.Border,
+        BorderSizePixel = 1,
+        ZIndex = 43,
+        Parent = selector,
+    })
+
+    local arrow = codeLabel(selector, "v", 11, THEME.DimText, 44)
+    arrow.AnchorPoint = Vector2.new(1, 0)
+    arrow.Position = UDim2.new(1, -8, 0, 0)
+    arrow.Size = UDim2.fromOffset(18, 30)
+    arrow.TextXAlignment = Enum.TextXAlignment.Center
+
+    local menu = create("ScrollingFrame", {
+        Name = "Options",
+        Position = UDim2.fromOffset(0, 36),
+        Size = UDim2.new(1, 0, 0, 154),
+        BackgroundColor3 = THEME.Section,
+        BorderColor3 = THEME.BorderDark,
+        BorderSizePixel = 1,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 2,
+        ScrollBarImageColor3 = THEME.DimText,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+        Visible = false,
+        ZIndex = 60,
+        Parent = picker,
+    })
+
+    create("Frame", {
+        Position = UDim2.fromOffset(1, 1),
+        Size = UDim2.new(1, -2, 1, -2),
+        BackgroundTransparency = 1,
+        BorderColor3 = THEME.Border,
+        BorderSizePixel = 1,
+        ZIndex = 61,
+        Parent = menu,
+    })
+
+    create("UIPadding", {
+        PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5),
+        PaddingLeft = UDim.new(0, 5), PaddingRight = UDim.new(0, 5),
+        Parent = menu,
+    })
+
+    create("UIListLayout", {
+        Padding = UDim.new(0, 4),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = menu,
+    })
+
+    local manualRoutes = {
+        ROUTES[83038462357724],
+        ROUTES[134162299584012],
+        ROUTES[142823291],
+        SNIPER_ARENA_ROUTE,
+        ONE_TAP_ROUTE,
+        ROUTES[74889851913797],
+        ROUTES[133188236593503],
+        ROUTES[128481067661991],
+        ROUTES[137233438285284],
+        ROUTES[131558436575033],
+        ROUTES[114697347887839],
+    }
+
+    local selectedRoute = nil
+    local open = false
+    local busy = false
+
+    local function setDropdown(openState)
+        if busy or cancelled then return end
+        open = openState == true
+        LOADER_EXPANDED = open
+        if open then
+            menu.Visible = true
+            arrow.Text = "^"
+            tween(card, 0.18, {Size = UDim2.fromOffset(WINDOW_WIDTH, EXPANDED_HEIGHT)})
+            tween(shadow, 0.18, {Size = UDim2.fromOffset(WINDOW_WIDTH, EXPANDED_HEIGHT)})
+            tween(picker, 0.18, {Size = UDim2.new(1, -56, 0, 196)})
+        else
+            arrow.Text = "v"
+            menu.Visible = false
+            tween(card, 0.18, {Size = targetCardSize})
+            tween(shadow, 0.18, {Size = targetCardSize})
+            tween(picker, 0.18, {Size = UDim2.new(1, -56, 0, 34)})
+        end
+    end
+
+    selector.MouseEnter:Connect(function()
+        if not busy then tween(selector, 0.08, {BackgroundColor3 = THEME.ElementHover}) end
+    end)
+    selector.MouseLeave:Connect(function()
+        if not busy then tween(selector, 0.08, {BackgroundColor3 = THEME.Element}) end
+    end)
+    selector.MouseButton1Click:Connect(function() setDropdown(not open) end)
+
+    for index, option in ipairs(manualRoutes) do
+        local routeOption = {name = option.name, source = option.source, url = option.url}
+        local item = create("TextButton", {
+            Name = "Option" .. tostring(index),
+            LayoutOrder = index,
+            Size = UDim2.new(1, -2, 0, 27),
+            BackgroundColor3 = THEME.Element,
+            BorderColor3 = THEME.BorderDark,
+            BorderSizePixel = 1,
+            AutoButtonColor = false,
+            Font = Enum.Font.Code,
+            Text = "  " .. routeOption.name,
+            TextColor3 = THEME.Text,
+            TextSize = 11,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            ZIndex = 62,
+            Parent = menu,
+        })
+
+        create("Frame", {
+            Position = UDim2.fromOffset(1, 1), Size = UDim2.new(1, -2, 1, -2),
+            BackgroundTransparency = 1, BorderColor3 = THEME.Border, BorderSizePixel = 1, ZIndex = 63, Parent = item,
+        })
+
+        item.MouseEnter:Connect(function()
+            if not busy then tween(item, 0.08, {BackgroundColor3 = THEME.ElementHover}) end
+        end)
+        item.MouseLeave:Connect(function()
+            if not busy then tween(item, 0.08, {BackgroundColor3 = THEME.Element}) end
+        end)
+
+        item.MouseButton1Click:Connect(function()
+            if busy or cancelled then return end
+            busy = true
+            selectedRoute = {name = routeOption.name, source = routeOption.source, url = routeOption.url}
+            selector.Text = "  " .. selectedRoute.name
+            setStatus(selectedRoute.name, "Preparing script...")
+            item.BackgroundColor3 = THEME.ElementHover
+            open = false
+            menu.Visible = false
+            arrow.Text = "v"
+            task.wait(0.12)
+        end)
+    end
+
+    tween(picker, 0.12, {GroupTransparency = 0})
+
+    while not selectedRoute and gui.Parent and not cancelled do
+        task.wait(0.03)
+    end
+
+    if cancelled or not selectedRoute then return nil end
+
+    local fade = tween(picker, 0.10, {GroupTransparency = 1})
+    fade.Completed:Wait()
+    if picker.Parent then picker:Destroy() end
+    LOADER_EXPANDED = false
+    card.Size = targetCardSize
+    shadow.Size = targetCardSize
+    return selectedRoute
+end
+
+
+-- =========================
+-- Entrance Animation + Loader Sequence
+-- =========================
+
+card.Size = UDim2.fromOffset(WINDOW_WIDTH, WINDOW_HEIGHT - 14)
+shadow.Size = card.Size
+
+tween(card, 0.20, {GroupTransparency = 0, Size = targetCardSize})
+tween(shadow, 0.20, {Size = targetCardSize})
 
 task.spawn(function()
-	local Players = game:GetService("Players")
-	local RunService = game:GetService("RunService")
-	local UIS = game:GetService("UserInputService")
-	local ReplicatedStorage = game:GetService("ReplicatedStorage")
-	local Camera = workspace.CurrentCamera
-	local LocalPlayer = Players.LocalPlayer
-
-	workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-		Camera = workspace.CurrentCamera
-	end)
-
-	-- =====================================================================
-	-- CONFIG.AIM (mirip source PuckAFK yang diadaptasi)
-	-- =====================================================================
-	local Config = {
-		Aim = {
-			Enabled = true,
-			HoldRMB = false,            -- true = wajib tahan RMB (Legit), false = aktif terus (Rage)
-			VisibleCheck = false,        -- Rage Max: abaikan pengecekan visibilitas
-			RespectGameVisibility = false,
-			RespectSmoke = false,
-			RespectFlash = false,
-			HeadPriority = true,
-			AimPoint = "Closest Part",   -- "Head" / "Upper Torso" / "Closest Part"
-
-			AutoShoot = false,
-			AutoShootRadius = 10,
-			AutoShootDelay = 0.00,
-
-			FOV = 180,                   -- dipakai buat FOV circle (mode legat/rage)
-			SmoothSpeed = 120,           -- snap hampir instan buat rage
-			MaxDistance = 700,
-			StickyTarget = true,
-			StickyMultiplier = 1.60,
-
-			Prediction = true,
-			PredictionTime = 0.10,
-			PredictionSmoothing = 0.55,
-			MaxPredictionOffset = 18,
-			AdaptiveSmoothing = false,
-			MicroSnapRadius = 8,
-			TargetPriority = "Crosshair",
-			SwitchDelay = 0,
-			SwitchThreshold = 0.03,
-			LockGrace = 0.12,
-
-			ShowFOV = true,
-		},
-	}
-
-	local mode = "Rage"  -- "Off" / "Legit" / "Rage"
-	local function aimOn()
-		return mode ~= "Off" and Config.Aim.Enabled
-	end
-
-	-- =====================================================================
-	-- SERVICE LOOKUP (EntityService + ClientShootableComponent)
-	-- =====================================================================
-	local EntityService, Shootable
-	do
-		local okE, ent = pcall(function()
-			return require(ReplicatedStorage:WaitForChild("Remote", 6):WaitForChild("EntityService", 6))
-		end)
-		local okS, sh = pcall(function()
-			return require(ReplicatedStorage:WaitForChild("Client", 6)
-				:WaitForChild("CombatController", 6)
-				:WaitForChild("ClientComponent", 6)
-				:WaitForChild("ClientShootableComponent", 6))
-		end)
-		EntityService = okE and ent or nil
-		Shootable = okS and sh or nil
-	end
-
-	-- =====================================================================
-	-- HELPERS ALA SOURCE PUCKAFK (diadaptasi ke EntityService)
-	-- =====================================================================
-	local mouseAimSupported = type(mousemoverel) == "function"
-	local mouserelSensitivity = 1
-	local targetVelocityHistory = {}
-
-	local function safeCall(fn, ...)
-		local ok, res = pcall(fn, ...)
-		if ok then return res end
-		return nil
-	end
-
-	local function currentCamera()
-		return Camera
-	end
-
-	local function screenCenter()
-		if Camera then return Camera.ViewportSize * 0.5 end
-		return Vector2.new()
-	end
-
-	local function worldToScreen(worldPos)
-		if not Camera then return nil, false end
-		local sp, on = Camera:WorldToViewportPoint(worldPos)
-		if on and sp.Z > 0 then return Vector2.new(sp.X, sp.Y), true end
-		return nil, false
-	end
-
-	local function wrapAimAngle(a)
-		while a > math.pi do a = a - (math.pi * 2) end
-		while a < -math.pi do a = a + (math.pi * 2) end
-		return a
-	end
-
-	local function mouseAimMoveConst()
-		return Vector2.new(0.22, 0.22)
-	end
-
-	local function getAimMouseSensitivity()
-		return Vector2.new(1, 1)
-	end
-
-	local function getLocalEntity()
-		if EntityService and EntityService.GetLocalEntity then
-			return safeCall(EntityService.GetLocalEntity, EntityService)
-		end
-		return nil
-	end
-
-	local localEntityModel = nil
-	local function refreshLocalEntity()
-		local le = getLocalEntity()
-		if le then
-			local inst = le.Instance
-			localEntityModel = (inst and inst:IsA("Player") and inst.Character) or inst
-		end
-	end
-
-	local function localPlayerAlive()
-		if LocalPlayer.Character then
-			local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-			if hum and hum.Health > 0 then return true end
-		end
-		return false
-	end
-
-	local function combatRuntimeActive()
-		return localPlayerAlive()
-	end
-
-	local function getEntityModel(entity)
-		if typeof(entity) == "Instance" then
-			if entity:IsA("Model") then return entity end
-			return entity.Parent
-		end
-		local inst = entity.Instance
-		return (inst and inst:IsA("Player") and inst.Character) or inst or (entity.Model)
-	end
-
-	local function getHeadPart(entity)
-		local model = getEntityModel(entity)
-		if model and model:IsA("Model") then
-			local h = model:FindFirstChild("Head")
-			if h and h:IsA("BasePart") then return h end
-		end
-		return nil
-	end
-
-	local function getRootPart(entity)
-		local model = getEntityModel(entity)
-		if model and model:IsA("Model") then
-			local r = model:FindFirstChild("HumanoidRootPart")
-			if r and r:IsA("BasePart") then return r end
-		end
-		return nil
-	end
-
-	local function isEnemy(entity)
-		if EntityService and EntityService.IsLocalEntity then
-			if safeCall(EntityService.IsLocalEntity, EntityService, entity) then return false end
-		end
-		if not entity then return false end
-		if entity.IsAlive and not entity:IsAlive() then return false end
-		local char = getEntityModel(entity)
-		if not char then return false end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hum or hum.Health <= 0 then return false end
-		return true
-	end
-
-	local function iterateEnemies(fn)
-		local le = getLocalEntity()
-		if not le or not le.World or not le.World.EntitiesByTeam then return end
-		local localTeamId = nil
-		if EntityService and EntityService.GetTeamOfEntity then
-			localTeamId = safeCall(EntityService.GetTeamOfEntity, EntityService, le)
-		end
-		for _, teamDict in pairs(le.World.EntitiesByTeam) do
-			local items = teamDict._items or teamDict
-			for _, ent in pairs(items) do
-				if isEnemy(ent) then
-					fn(ent)
-				end
-			end
-		end
-	end
-
-	local function gameSaysVisible(entity)
-		if not Config.Aim.RespectGameVisibility then return true end
-		return true
-	end
-
-	local function blockedByEffects(pos)
-		if not Config.Aim.RespectSmoke and not Config.Aim.RespectFlash then return false end
-		return false
-	end
-
-	local function hasLineOfSight(entity, worldPos)
-		-- cek raycast dari camera ke target
-		if not Camera then return true end
-		local origin = Camera.CFrame.Position
-		local dir = (worldPos - origin)
-		local rayUnit = dir.Unit
-		local dist = dir.Magnitude
-		local params = RaycastParams.new()
-		params.FilterType = Enum.RaycastFilterType.Exclude
-		local char = LocalPlayer.Character
-		local filter = {}
-		if char then table.insert(filter, char) end
-		local tchar = getEntityModel(entity)
-		if tchar then table.insert(filter, tchar) end
-		params.FilterDescendantsInstances = filter
-		local hit = workspace:Raycast(origin, rayUnit * dist, params)
-		if hit then return false end
-		return true
-	end
-
-	local function getHealth(entity)
-		local char = getEntityModel(entity)
-		local hum = char and char:FindFirstChildOfClass("Humanoid")
-		if hum then return hum.Health, hum.MaxHealth end
-		return 100, 100
-	end
-
-	local function nativeRMBHeld()
-		if UIS.MouseBehavior == Enum.MouseBehavior.LockCenter then return true end
-		return UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-	end
-
-	local function autoShootButtonHeld()
-		if Config.Aim.AutoShootButton == "RMB" then return nativeRMBHeld() end
-		return UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
-	end
-
-	-- =====================================================================
-	-- getAimPosition — pilih bagian tubuh yang di-aim
-	-- =====================================================================
-	local function getAimPosition(entity)
-		local model = getEntityModel(entity)
-		local aimPoint = tostring(Config.Aim.AimPoint or "Head")
-
-		local function validPart(part)
-			return typeof(part) == "Instance"
-				and part:IsA("BasePart")
-				and part.Parent ~= nil
-		end
-
-		local head = getHeadPart(entity)
-		local root = getRootPart(entity)
-		local torso = nil
-
-		if model and model:IsA("Model") then
-			torso = model:FindFirstChild("UpperTorso")
-				or model:FindFirstChild("Torso")
-				or model:FindFirstChild("LowerTorso")
-				or root
-		else
-			torso = root
-		end
-
-		if aimPoint == "Upper Torso" then
-			if validPart(torso) then return torso.Position, torso end
-			if validPart(head) then return head.Position, head end
-		elseif aimPoint == "Closest Part" and model and model:IsA("Model") then
-			local cam = currentCamera()
-			local bestPart = nil
-			local bestScreenDistance = math.huge
-
-			if cam then
-				local viewportCenter = cam.ViewportSize * 0.5
-				local candidates = {
-					head,
-					model:FindFirstChild("UpperTorso"),
-					model:FindFirstChild("Torso"),
-					model:FindFirstChild("LowerTorso"),
-					root,
-				}
-				for _, part in ipairs(candidates) do
-					if validPart(part) then
-						local screen, visible = cam:WorldToViewportPoint(part.Position)
-						if visible and screen.Z > 0 then
-							local delta = Vector2.new(screen.X, screen.Y) - viewportCenter
-							local distance = delta.Magnitude
-							if distance < bestScreenDistance then
-								bestScreenDistance = distance
-								bestPart = part
-							end
-						end
-					end
-				end
-			end
-
-			if bestPart then return bestPart.Position, bestPart end
-		else
-			if validPart(head) then return head.Position, head end
-		end
-
-		if validPart(root) then return root.Position, root end
-
-		if model and model:IsA("Model") then
-			local pivot = safeCall(function() return model:GetPivot() end)
-			if typeof(pivot) == "CFrame" then return pivot.Position, model.PrimaryPart end
-			local pv = model.PrimaryPart
-			if pv and pv:IsA("BasePart") then return pv.Position, pv end
-		end
-
-		return nil, nil
-	end
-
-	-- =====================================================================
-	-- getTargetVelocity — velocity difilter buat prediksi
-	-- =====================================================================
-	local function getTargetVelocity(entity, aimPart)
-		local rawVelocity = nil
-
-		if typeof(entity) ~= "Instance" then
-			rawVelocity = safeCall(function()
-				if entity.GetVelocity then return entity:GetVelocity() end
-			end)
-		end
-
-		if typeof(rawVelocity) ~= "Vector3" then
-			local part = aimPart
-			if not (typeof(part) == "Instance" and part:IsA("BasePart")) then
-				part = getRootPart(entity)
-			end
-			if typeof(part) == "Instance" and part:IsA("BasePart") then
-				rawVelocity = part.AssemblyLinearVelocity
-			end
-		end
-
-		if typeof(rawVelocity) ~= "Vector3" then
-			rawVelocity = Vector3.zero
-		end
-
-		if rawVelocity.Magnitude > 250 then
-			rawVelocity = rawVelocity.Unit * 250
-		end
-
-		local smoothing = math.clamp(tonumber(Config.Aim.PredictionSmoothing) or 0.72, 0, 0.98)
-		local previous = targetVelocityHistory[entity]
-
-		local filtered
-		if typeof(previous) == "Vector3" then
-			filtered = previous:Lerp(rawVelocity, 1 - smoothing)
-		else
-			filtered = rawVelocity
-		end
-
-		targetVelocityHistory[entity] = filtered
-		return filtered
-	end
-
-	-- =====================================================================
-	-- getPredictedAimPosition — velocity lead
-	-- =====================================================================
-	local function getPredictedAimPosition(entity, position, part)
-		if not Config.Aim.Prediction then return position end
-
-		local lead = math.clamp(tonumber(Config.Aim.PredictionTime) or 0, 0, 0.30)
-		if lead <= 0 then return position end
-
-		local velocity = getTargetVelocity(entity, part)
-
-		local verticalScale = math.abs(velocity.Y) >= 8 and 0.10 or 0.30
-		local offset = Vector3.new(
-			velocity.X * lead,
-			velocity.Y * lead * verticalScale,
-			velocity.Z * lead
-		)
-
-		offset = Vector3.new(
-			offset.X,
-			math.clamp(offset.Y, -2.25, 2.25),
-			offset.Z
-		)
-
-		local maxOffset = math.max(tonumber(Config.Aim.MaxPredictionOffset) or 14, 0)
-		if maxOffset > 0 and offset.Magnitude > maxOffset then
-			offset = offset.Unit * maxOffset
-		end
-
-		return position + offset
-	end
-
-	-- =====================================================================
-	-- targetInfo — scoring & validasi per entity
-	-- =====================================================================
-	local function targetInfo(entity, fovMultiplier)
-		if not isEnemy(entity) then return nil end
-
-		local rawPosition, part = getAimPosition(entity)
-		if not rawPosition then return nil end
-
-		local cam = currentCamera()
-		if not cam then return nil end
-
-		local selectionPosition = rawPosition
-		local selectionRoot = getRootPart(entity)
-		if typeof(selectionRoot) == "Instance" and selectionRoot:IsA("BasePart") and selectionRoot.Parent ~= nil then
-			selectionPosition = selectionRoot.Position
-		end
-
-		local distance = (selectionPosition - cam.CFrame.Position).Magnitude
-		if distance > Config.Aim.MaxDistance then return nil end
-
-		if not gameSaysVisible(entity) then return nil end
-		if blockedByEffects(rawPosition) then return nil end
-
-		local visible = hasLineOfSight(entity, rawPosition)
-		if Config.Aim.VisibleCheck and not visible then return nil end
-
-		local rawScreenPos, rawOnScreen = worldToScreen(selectionPosition)
-		if not rawOnScreen then return nil end
-
-		local rawScreenDistance = (rawScreenPos - screenCenter()).Magnitude
-		local maxFov = Config.Aim.FOV * (fovMultiplier or 1)
-
-		if rawScreenDistance > maxFov then return nil end
-
-		local position = getPredictedAimPosition(entity, rawPosition, part)
-		local predictedScreenPos, predictedOnScreen = worldToScreen(position)
-		if not predictedOnScreen then
-			position = rawPosition
-			predictedScreenPos = rawScreenPos
-		end
-
-		local predictedScreenDistance = (predictedScreenPos - screenCenter()).Magnitude
-
-		local health, maxHealth = getHealth(entity)
-		local healthRatio = maxHealth > 0 and math.clamp(health / maxHealth, 0, 1) or 1
-		local distanceRatio = math.clamp(distance / math.max(Config.Aim.MaxDistance, 1), 0, 1)
-		local priority = tostring(Config.Aim.TargetPriority or "Hybrid")
-
-		local score
-		if priority == "Distance" then
-			score = (rawScreenDistance * 0.35) + (distanceRatio * maxFov * 0.65)
-		elseif priority == "Low Health" then
-			score = (rawScreenDistance * 0.60) + (healthRatio * maxFov * 0.40)
-		elseif priority == "Hybrid" then
-			score = (rawScreenDistance * 0.65)
-				+ (distanceRatio * maxFov * 0.20)
-				+ (healthRatio * maxFov * 0.15)
-			if visible then score = score * 0.92 end
-		else
-			score = rawScreenDistance
-		end
-
-		return {
-			Entity = entity,
-			Position = position,
-			RawPosition = rawPosition,
-			Part = part,
-			Distance = distance,
-			ScreenDistance = predictedScreenDistance,
-			RawScreenDistance = rawScreenDistance,
-			Score = score,
-			Visible = visible,
-			Velocity = getTargetVelocity(entity, part),
-		}
-	end
-
-	-- =====================================================================
-	-- keepLockedTargetThroughGrace + acquireTarget (sticky lock)
-	-- =====================================================================
-	local lockedTarget = nil
-	local lockedTargetLastInfo = nil
-	local lockedTargetLastValidAt = 0
-	local lastTargetChangeAt = 0
-
-	local function keepLockedTargetThroughGrace()
-		if not lockedTarget or not lockedTargetLastInfo then return nil end
-		local grace = math.max(tonumber(Config.Aim.LockGrace) or 0, 0)
-		if grace <= 0 or (os.clock() - lockedTargetLastValidAt) > grace then return nil end
-		if not isEnemy(lockedTarget) then return nil end
-
-		local rawPosition, part = getAimPosition(lockedTarget)
-		if rawPosition then
-			local info = lockedTargetLastInfo
-			info.RawPosition = rawPosition
-			info.Part = part
-			info.Position = getPredictedAimPosition(lockedTarget, rawPosition, part)
-			info.Velocity = getTargetVelocity(lockedTarget, part)
-			local screenPos, onScreen = worldToScreen(info.Position)
-			if onScreen then info.ScreenDistance = (screenPos - screenCenter()).Magnitude end
-			return info
-		end
-		return lockedTargetLastInfo
-	end
-
-	local function acquireTarget()
-		local currentInfo = nil
-
-		if lockedTarget then
-			currentInfo = targetInfo(lockedTarget, Config.Aim.StickyMultiplier)
-			if currentInfo then
-				currentInfo.Score = currentInfo.Score * 0.78
-				lockedTargetLastInfo = currentInfo
-				lockedTargetLastValidAt = os.clock()
-			else
-				currentInfo = keepLockedTargetThroughGrace()
-			end
-		end
-
-		local best = nil
-		iterateEnemies(function(entity)
-			if entity ~= lockedTarget then
-				local info = targetInfo(entity, 1)
-				if info and (not best or info.Score < best.Score) then
-					best = info
-				end
-			end
-		end)
-
-		if currentInfo then
-			if not best then return currentInfo end
-			local threshold = math.clamp(tonumber(Config.Aim.SwitchThreshold) or 0.12, 0, 0.90)
-			local requiredScore = currentInfo.Score * (1 - threshold)
-			local delay = math.max(tonumber(Config.Aim.SwitchDelay) or 0, 0)
-			local delayPassed = (os.clock() - lastTargetChangeAt) >= delay
-			if not delayPassed or best.Score >= requiredScore then return currentInfo end
-		end
-
-		if best then
-			if lockedTarget ~= best.Entity then lastTargetChangeAt = os.clock() end
-			lockedTarget = best.Entity
-			lockedTargetLastInfo = best
-			lockedTargetLastValidAt = os.clock()
-			return best
-		end
-
-		lockedTarget = nil
-		lockedTargetLastInfo = nil
-		return nil
-	end
-
-	-- =====================================================================
-	-- moveAimWithMouse (mousemoverel) — native, paling ampuh anti-deteksi
-	-- =====================================================================
-	local function moveAimWithMouse(cam, targetPosition, dt, responseSpeed, snap)
-		if not mouseAimSupported or not cam or not targetPosition then return false end
-
-		local offset = targetPosition - cam.CFrame.Position
-		if offset.Magnitude <= 0.001 then return true end
-
-		local facing = cam.CFrame.LookVector
-		local targetDirection = offset.Unit
-
-		if targetDirection.X ~= targetDirection.X
-			or targetDirection.Y ~= targetDirection.Y
-			or targetDirection.Z ~= targetDirection.Z
-		then
-			return false
-		end
-
-		local diffYaw = wrapAimAngle(
-			math.atan2(facing.X, facing.Z)
-			- math.atan2(targetDirection.X, targetDirection.Z)
-		)
-
-		local facingY = math.clamp(facing.Y, -1, 1)
-		local targetY = math.clamp(targetDirection.Y, -1, 1)
-		local diffPitch = math.asin(facingY) - math.asin(targetY)
-
-		local sensitivity = getAimMouseSensitivity()
-		local denominator = mouseAimMoveConst() * sensitivity
-
-		local delta = Vector2.new(
-			diffYaw / math.max(math.abs(denominator.X), 0.000001),
-			diffPitch / math.max(math.abs(denominator.Y), 0.000001)
-		)
-
-		local response = 1 - math.exp(-(math.max(responseSpeed, 0.01) * 0.68) * math.max(dt, 0))
-		if snap then response = 1 end
-
-		delta = delta * math.clamp(response, 0, 1)
-		delta = Vector2.new(
-			math.clamp(delta.X, -450, 450),
-			math.clamp(delta.Y, -450, 450)
-		)
-
-		local ok = pcall(mousemoverel, delta.X, delta.Y)
-		return ok
-	end
-
-	-- =====================================================================
-	-- aimActive + applyAim (inti render loop)
-	-- =====================================================================
-	local function aimActive()
-		if not aimOn() then return false end
-		if not combatRuntimeActive() then lockedTarget = nil; return false end
-		refreshLocalEntity()
-		if not localPlayerAlive() then return false end
-		if not Config.Aim.HoldRMB then return true end
-		return nativeRMBHeld()
-	end
-
-	local lastAutoShootAt = 0
-	local function autoShootActive()
-		return Config.Aim.AutoShoot
-	end
-
-	local function tryAutoShoot(info)
-		if not info then return end
-		if (os.clock() - lastAutoShootAt) < Config.Aim.AutoShootDelay then return end
-		local radius = math.max(tonumber(Config.Aim.AutoShootRadius) or 10, 0)
-		if info.ScreenDistance > radius then return end
-		pcall(function() mouse1click() end)
-		lastAutoShootAt = os.clock()
-	end
-
-	local function applyAim(dt)
-		local shouldAim = aimActive()
-		local shouldAutoShoot = autoShootActive()
-
-		if not shouldAim and not shouldAutoShoot then
-			if not combatRuntimeActive() or not localPlayerAlive() then
-				lockedTarget = nil
-				lockedTargetLastInfo = nil
-			end
-			return
-		end
-
-		local info = acquireTarget()
-		if not info then return end
-
-		lockedTarget = info.Entity
-		local cam = currentCamera()
-		if not cam then return end
-
-		if shouldAim then
-			local current = cam.CFrame
-			local speed = math.max(tonumber(Config.Aim.SmoothSpeed) or 0.01, 0.01)
-
-			if Config.Aim.AdaptiveSmoothing then
-				local normalized = math.clamp(info.ScreenDistance / math.max(Config.Aim.FOV, 1), 0, 1)
-				local multiplier = 0.55 + (math.sqrt(normalized) * 1.45)
-				speed = speed * multiplier
-			end
-
-			local snapRadius = math.max(tonumber(Config.Aim.MicroSnapRadius) or 0, 0)
-			local shouldSnap = snapRadius > 0 and info.ScreenDistance <= snapRadius
-
-			local usedMouseAim = moveAimWithMouse(cam, info.Position, dt, speed, shouldSnap)
-
-			if not usedMouseAim then
-				local desired = CFrame.lookAt(current.Position, info.Position)
-				local alpha = 1 - math.exp(-speed * math.max(dt, 0))
-				if shouldSnap then alpha = 1 end
-				cam.CFrame = current:Lerp(desired, math.clamp(alpha, 0, 1))
-			end
-		end
-
-		if shouldAutoShoot then tryAutoShoot(info) end
-	end
-
-	-- applyAimPreset: tombol preset rage (dari source PuckAFK yang diadaptasi)
-	local applyAimPreset
-	applyAimPreset = function(name, overrides, desc)
-		-- adapt: terapkan override ke Config.Aim
-		for k, v in pairs(overrides) do
-			Config.Aim[k] = v
-		end
-		mode = name:match("Rage") and "Rage" or "Legit"
-		return true
-	end
-
-	local PRESETS = {
-		{ name = "Rage • Visible", desc = "Aktif terus • FOV 500 • cepat • cuma yang kelihatan", data = {
-			Enabled = true, HoldRMB = false, VisibleCheck = true, RespectGameVisibility = true,
-			RespectSmoke = false, RespectFlash = false, HeadPriority = true, AimPoint = "Head",
-			Prediction = true, PredictionTime = 0.08, PredictionSmoothing = 0.62, MaxPredictionOffset = 16,
-			SwitchThreshold = 0.07, LockGrace = 0.14, AdaptiveSmoothing = false, MicroSnapRadius = 4,
-			TargetPriority = "Crosshair", SwitchDelay = 0, FOV = 500, SmoothSpeed = 92, MaxDistance = 700,
-			StickyTarget = true, StickyMultiplier = 1.45, ShowFOV = true,
-		}},
-		{ name = "Rage • Max", desc = "Aktif terus • FOV maks • respons instan • abaikan semua", data = {
-			Enabled = true, HoldRMB = false, VisibleCheck = false, RespectGameVisibility = false,
-			RespectSmoke = false, RespectFlash = false, HeadPriority = true, AimPoint = "Closest Part",
-			Prediction = true, PredictionTime = 0.10, PredictionSmoothing = 0.55, MaxPredictionOffset = 18,
-			SwitchThreshold = 0.03, LockGrace = 0.12, AdaptiveSmoothing = false, MicroSnapRadius = 8,
-			TargetPriority = "Crosshair", SwitchDelay = 0, FOV = 600, SmoothSpeed = 120, MaxDistance = 700,
-			StickyTarget = true, StickyMultiplier = 1.60, ShowFOV = true,
-		}},
-	}
-
-	-- =====================================================================
-	-- FOV CIRCLE
-	-- =====================================================================
-	local FOVCircle = Drawing.new("Circle")
-	FOVCircle.Thickness = 1
-	FOVCircle.Transparency = 0.7
-	FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-	FOVCircle.NumSides = 64
-	FOVCircle.Visible = false
-
-	local function updateFOV()
-		FOVCircle.Position = UIS:GetMouseLocation()
-		FOVCircle.Radius = Config.Aim.FOV
-		FOVCircle.Visible = Config.Aim.ShowFOV and aimOn()
-	end
-
-	-- =====================================================================
-	-- ESP ENGINE
-	-- =====================================================================
-	local espEnabled = false
-	local espBox = true
-	local espHealth = true
-	local espObjs = {}
-
-	local function makeDrawing(kind)
-		local d = Drawing.new(kind)
-		d.Visible = false
-		return d
-	end
-
-	local function espFor(char)
-		local e = espObjs[char]
-		if e then return e end
-		e = {
-			box = makeDrawing("Quad"),
-			name = makeDrawing("Text"),
-			health = makeDrawing("Line"),
-		}
-		e.box.Thickness = 1
-		e.box.Color = Color3.fromRGB(255, 80, 80)
-		e.name.Size = 13
-		e.name.Center = true
-		e.name.Outline = true
-		e.name.Color = Color3.fromRGB(255, 255, 255)
-		e.health.Color = Color3.fromRGB(80, 255, 80)
-		e.health.Thickness = 2
-		espObjs[char] = e
-		return e
-	end
-
-	local function renderESP(char, playerName)
-		local root = char:FindFirstChild("HumanoidRootPart")
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not root or not hum or hum.Health <= 0 then return end
-		local top = worldToScreen(root.Position + Vector3.new(0, 5, 0))
-		local bottom = worldToScreen(root.Position - Vector3.new(0, 5, 0))
-		if not top or not bottom then return end
-		local height = (top - bottom).Magnitude
-		local width = height * 0.6
-		local e = espFor(char)
-		local cx, cy = top.X, top.Y
-		if espBox then
-			e.box.Visible = true
-			e.box.PointA = Vector2.new(cx - width/2, cy)
-			e.box.PointB = Vector2.new(cx + width/2, cy)
-			e.box.PointC = Vector2.new(cx + width/2, cy + height)
-			e.box.PointD = Vector2.new(cx - width/2, cy + height)
-		else
-			e.box.Visible = false
-		end
-		e.name.Visible = true
-		e.name.Position = Vector2.new(cx, cy - 16)
-		e.name.Text = playerName
-		local hf = hum.Health / hum.MaxHealth
-		e.health.Visible = espHealth
-		if e.health.Visible then
-			e.health.From = Vector2.new(cx - width/2 - 4, cy + height)
-			e.health.To = Vector2.new(cx - width/2 - 4, cy + height - (height * hf))
-			e.health.Color = Color3.fromRGB(math.clamp((1 - hf) * 255, 0, 255), math.clamp(hf * 255, 0, 255), 0)
-		end
-	end
-
-	local function hideAllESP()
-		for _, e in pairs(espObjs) do
-			e.box.Visible = false
-			e.name.Visible = false
-			e.health.Visible = false
-		end
-	end
-
-	local function clearAllESP()
-		for _, e in pairs(espObjs) do
-			pcall(function() e.box:Remove() end)
-			pcall(function() e.name:Remove() end)
-			pcall(function() e.health:Remove() end)
-		end
-		espObjs = {}
-	end
-
-	-- =====================================================================
-	-- CHAMS
-	-- =====================================================================
-	local chamsEnabled = false
-	local highlights = {}
-	local function applyChams()
-		if not chamsEnabled then
-			for char, hl in pairs(highlights) do
-				pcall(function() hl:Destroy() end)
-			end
-			highlights = {}
-		end
-		for _, plr in ipairs(Players:GetPlayers()) do
-			if plr ~= LocalPlayer and plr.Character then
-				local char = plr.Character
-				if chamsEnabled and not highlights[char] then
-					local hl = Instance.new("Highlight")
-					hl.FillColor = Color3.fromRGB(255, 0, 0)
-					hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-					hl.FillTransparency = 0.5
-					hl.Adornee = char
-					hl.Parent = char
-					highlights[char] = hl
-				end
-			end
-		end
-	end
-	task.spawn(function()
-		while task.wait(0.5) do applyChams() end
-	end)
-
-	-- =====================================================================
-	-- RENDER BIND (jalur utama)
-	-- =====================================================================
-	RunService:BindToRenderStep("RainzxSniperAim", Enum.RenderPriority.Camera.Value + 25, function(dt)
-		applyAim(dt)
-		updateFOV()
-		if espEnabled then
-			for char in pairs(espObjs) do
-				if not char.Parent then clearAllESP(); break end
-			end
-			for _, plr in ipairs(Players:GetPlayers()) do
-				if plr ~= LocalPlayer and plr.Character then
-					renderESP(plr.Character, plr.Name)
-				end
-			end
-		else
-			hideAllESP()
-		end
-	end)
-
-	-- =====================================================================
-	-- UI (RAINZX DEV)
-	-- =====================================================================
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "RainzxDevSniper"
-	pcall(function() gui.Parent = game:GetService("CoreGui") end)
-	if not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
-
-	local frame = Instance.new("Frame")
-	frame.Size = UDim2.new(0, 260, 0, 470)
-	frame.Position = UDim2.new(0.5, -130, 0.5, -220)
-	frame.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-	frame.BorderSizePixel = 0
-	frame.Active = true
-	frame.Draggable = true
-	frame.Parent = gui
-
-	local function section(parent, y, h)
-		local f = Instance.new("Frame")
-		f.Size = UDim2.new(1, -20, 0, h)
-		f.Position = UDim2.new(0, 10, 0, y)
-		f.BackgroundTransparency = 1
-		f.Parent = parent
-		return f
-	end
-
-	local function toggleButton(parent, y, label, getter, setter)
-		local f = section(parent, y, 24)
-		local btn = Instance.new("TextButton")
-		btn.Size = UDim2.new(1, 0, 1, 0)
-		btn.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
-		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		btn.Text = label
-		btn.Font = Enum.Font.SourceSans
-		btn.TextSize = 13
-		btn.Parent = f
-		local function refresh()
-			btn.Text = label .. ": " .. (getter() and "ON" or "OFF")
-			btn.BackgroundColor3 = getter() and Color3.fromRGB(0, 150, 70) or Color3.fromRGB(55, 55, 60)
-		end
-		btn.MouseButton1Click:Connect(function()
-			setter(not getter())
-			refresh()
-		end)
-		refresh()
-	end
-
-	local function actionButton(parent, y, label, fn, color)
-		local f = section(parent, y, 24)
-		local btn = Instance.new("TextButton")
-		btn.Size = UDim2.new(1, 0, 1, 0)
-		btn.BackgroundColor3 = color or Color3.fromRGB(70, 70, 75)
-		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		btn.Text = label
-		btn.Font = Enum.Font.SourceSans
-		btn.TextSize = 13
-		btn.Parent = f
-		btn.MouseButton1Click:Connect(fn)
-	end
-
-	local function numeric(parent, y, label, key)
-		local f = section(parent, y, 24)
-		local lbl = Instance.new("TextLabel")
-		lbl.Size = UDim2.new(0.6, -5, 1, 0)
-		lbl.BackgroundTransparency = 1
-		lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
-		lbl.Text = label
-		lbl.Font = Enum.Font.SourceSans
-		lbl.TextSize = 13
-		lbl.TextXAlignment = Enum.TextXAlignment.Left
-		lbl.Parent = f
-		local box = Instance.new("TextBox")
-		box.Size = UDim2.new(0.4, -5, 1, 0)
-		box.Position = UDim2.new(0.6, 0, 0, 0)
-		box.BackgroundColor3 = Color3.fromRGB(70, 70, 75)
-		box.TextColor3 = Color3.fromRGB(255, 255, 255)
-		box.Text = tostring(Config.Aim[key])
-		box.Font = Enum.Font.SourceSans
-		box.TextSize = 13
-		box.Parent = f
-		box.FocusLost:Connect(function()
-			local v = tonumber(box.Text)
-			if v then Config.Aim[key] = v end
-		end)
-	end
-
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, 0, 0, 30)
-	title.BackgroundColor3 = Color3.fromRGB(40, 40, 46)
-	title.TextColor3 = Color3.fromRGB(255, 255, 255)
-	title.Text = "RAINZX DEV | Sniper Arena RAGE"
-	title.Font = Enum.Font.SourceSansBold
-	title.TextSize = 15
-	title.Parent = frame
-
-	local statusTxt = Instance.new("TextLabel")
-	statusTxt.Size = UDim2.new(1, -20, 0, 16)
-	statusTxt.Position = UDim2.new(0, 10, 0, 32)
-	statusTxt.BackgroundTransparency = 1
-	statusTxt.TextColor3 = Color3.fromRGB(130, 200, 255)
-	statusTxt.Text = ("Aim Engine: "
-		.. (mouseAimSupported and "mousemoverel (native)" or "cam.CFrame lock (fallback)"))
-	statusTxt.Font = Enum.Font.SourceSans
-	statusTxt.TextSize = 11
-	statusTxt.TextXAlignment = Enum.TextXAlignment.Left
-	statusTxt.Parent = frame
-
-	local y = 52
-	actionButton(frame, y, "PRESET: Rage • Max", function()
-		local p = PRESETS[2]
-		applyAimPreset(p.name, p.data, p.desc)
-		statusTxt.Text = "Preset: " .. p.name .. " — " .. p.desc
-	end, Color3.fromRGB(150, 40, 40)); y = y + 28
-	actionButton(frame, y, "PRESET: Rage • Visible", function()
-		local p = PRESETS[1]
-		applyAimPreset(p.name, p.data, p.desc)
-		statusTxt.Text = "Preset: " .. p.name .. " — " .. p.desc
-	end, Color3.fromRGB(150, 70, 40)); y = y + 28
-
-	toggleButton(frame, y, "Aim Active", function() return aimOn() end, function(v)
-		if v then mode = "Rage" else mode = "Off" end
-		Config.Aim.Enabled = true
-	end); y = y + 28
-
-	toggleButton(frame, y, "Hold RMB", function() return Config.Aim.HoldRMB end, function(v) Config.Aim.HoldRMB = v end); y = y + 28
-	toggleButton(frame, y, "Visible Check", function() return Config.Aim.VisibleCheck end, function(v) Config.Aim.VisibleCheck = v end); y = y + 28
-	toggleButton(frame, y, "Prediction", function() return Config.Aim.Prediction end, function(v) Config.Aim.Prediction = v end); y = y + 28
-	toggleButton(frame, y, "Auto Shoot", function() return Config.Aim.AutoShoot end, function(v) Config.Aim.AutoShoot = v end); y = y + 28
-	numeric(frame, y, "FOV", "FOV"); y = y + 28
-	numeric(frame, y, "Smooth", "SmoothSpeed"); y = y + 28
-	toggleButton(frame, y, "ESP", function() return espEnabled end, function(v)
-		espEnabled = v
-		if not v then hideAllESP() end
-	end); y = y + 24
-	toggleButton(frame, y, "ESP Box", function() return espBox end, function(v) espBox = v end); y = y + 24
-	toggleButton(frame, y, "ESP Health", function() return espHealth end, function(v) espHealth = v end); y = y + 24
-	toggleButton(frame, y, "Chams", function() return chamsEnabled end, function(v) chamsEnabled = v end); y = y + 24
-
-	y = y + 2
-	local close = Instance.new("TextButton")
-	close.Size = UDim2.new(1, -20, 0, 24)
-	close.Position = UDim2.new(0, 10, 0, y)
-	close.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-	close.TextColor3 = Color3.fromRGB(255, 255, 255)
-	close.Text = "Tutup Script"
-	close.Font = Enum.Font.SourceSans
-	close.TextSize = 14
-	close.Parent = frame
-	close.MouseButton1Click:Connect(function()
-		clearAllESP()
-		for _, hl in pairs(highlights) do
-			pcall(function() hl:Destroy() end)
-		end
-		highlights = {}
-		pcall(function() FOVCircle:Remove() end)
-		gui:Destroy()
-	end)
-
-	print("RAINZX DEV | Sniper Arena RAGE v5.0 loaded.")
+    task.wait(0.18)
+    if cancelled then return end
+
+    setStatus("RAINZX DEV", "Detecting game...")
+    setProgress(0.08)
+
+    if not game:IsLoaded() then
+        local loaded = false
+        local connection
+        connection = game.Loaded:Connect(function()
+            loaded = true
+            if connection then connection:Disconnect() end
+        end)
+        local started = os.clock()
+        while not loaded and not game:IsLoaded() and os.clock() - started < 30 do
+            task.wait(0.05)
+        end
+        if connection then pcall(function() connection:Disconnect() end) end
+    end
+
+    setProgress(0.18)
+    task.wait(0.12)
+
+    local placeId = game.PlaceId
+    local universeId = game.GameId
+    local route = UNIVERSE_ROUTES[universeId] or ROUTES[placeId]
+
+    setStatus("RAINZX DEV", "Finding matching script...")
+    setProgress(0.30)
+    task.wait(0.20)
+
+    if not route then
+        route = chooseRouteManually(placeId)
+        if not route then
+            fail("No Script Selected", "Manual script selection was closed")
+            return
+        end
+    end
+
+    if cancelled then return end
+
+    setStatus(route.name, "Script found")
+    setProgress(0.42)
+    task.wait(0.18)
+
+    setStatus(route.name, "Connecting...")
+    setProgress(0.52)
+
+    local downloadOk, source = fetchSource(route.url)
+    if not downloadOk then
+        fail("Download Failed", source)
+        return
+    end
+
+    setStatus(route.name, "Downloading...")
+    setProgress(0.68)
+    task.wait(0.20)
+
+    if #source < 20 then
+        fail("Invalid Script", "Script source returned an unexpectedly small file")
+        return
+    end
+
+    setStatus(route.name, "Preparing...")
+    setProgress(0.78)
+    task.wait(0.15)
+
+    local compiler = loadstring or load
+    if type(compiler) ~= "function" then
+        fail("Compiler Unavailable", "This environment does not provide loadstring/load")
+        return
+    end
+
+    setStatus(route.name, "Compiling...")
+    setProgress(0.88)
+
+    local chunk, compileError = compiler(source)
+    if not chunk then
+        fail("Compile Failed", compileError)
+        return
+    end
+
+    setStatus(route.name, "Launching...")
+    setProgress(0.96)
+
+    local runtimeFinished = false
+    local runtimeOk = true
+    local runtimeError
+
+    task.spawn(function()
+        runtimeOk, runtimeError = pcall(chunk)
+        runtimeFinished = true
+    end)
+
+    task.wait(0.20)
+    if runtimeFinished and not runtimeOk then
+        fail("Launch Failed", runtimeError)
+        return
+    end
+
+    setProgress(1)
+    progressFill.BackgroundColor3 = THEME.Success
+    accentTop.BackgroundColor3 = THEME.Success
+    autoText.Text = "ready"
+    autoText.TextColor3 = THEME.Success
+    setStatus(route.name, "Loaded successfully", THEME.BrightText)
+
+    task.wait(0.75)
+
+    local fade = tween(card, 0.18, {
+        GroupTransparency = 1,
+        Size = UDim2.fromOffset(WINDOW_WIDTH, WINDOW_HEIGHT - 10),
+    })
+    tween(shadow, 0.18, {
+        BackgroundTransparency = 1,
+        Size = UDim2.fromOffset(WINDOW_WIDTH, WINDOW_HEIGHT - 10),
+    })
+    fade.Completed:Wait()
+
+    pcall(function() gui:Destroy() end)
 end)
