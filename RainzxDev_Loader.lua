@@ -17,7 +17,7 @@
       Build a Gun Army        : 134162299584012
 
     One free loader for all supported RAINZX DEV scripts.
-    Includes automatic PlaceId + universe detection, a manual script dropdown, and universal anti-AFK.
+    Includes automatic PlaceId + universe detection, an automatic script menu, and universal anti-AFK.
 ]]
 
 local ENV = (getgenv and getgenv()) or _G
@@ -862,97 +862,159 @@ end
 
 
 -- =========================
--- Manual Script Picker (Dropdown)
+-- Script Menu (auto-opens when game detection fails)
 -- =========================
 
-local function chooseRouteManually(placeId)
+local function showScriptMenu(placeId, universeId)
     if cancelled then return nil end
     setStatus("Choose a Script", "Automatic detection did not find this game")
     setProgress(0.30)
 
-    local picker = create("CanvasGroup", {
-        Name = "ManualDropdown",
-        Position = UDim2.fromOffset(28, 100),
-        Size = UDim2.new(1, -56, 0, 34),
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
+    local menuWidth = 320
+    local menuHeight = 330
+    local menuRoot = create("CanvasGroup", {
+        Name = "RAINZXDEVMenu",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, math.floor(WINDOW_WIDTH / 2) + 16, 0.5, 0),
+        Size = UDim2.fromOffset(menuWidth, menuHeight),
+        BackgroundColor3 = THEME.Main,
+        BorderColor3 = THEME.BorderDark,
+        BorderSizePixel = 1,
         GroupTransparency = 1,
-        ZIndex = 40,
-        Parent = section,
+        Active = true,
+        ZIndex = 30,
+        Parent = gui,
+    })
+    create("UIScale", {Scale = LOADER_SCALE, Parent = menuRoot})
+
+    local menuShadow = create("Frame", {
+        Name = "Shadow",
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = menuRoot.Position + UDim2.fromOffset(4, 4),
+        Size = UDim2.fromOffset(menuWidth, menuHeight),
+        BackgroundColor3 = Color3.fromRGB(0, 0, 0),
+        BackgroundTransparency = 0.5,
+        BorderSizePixel = 0,
+        ZIndex = 29,
+        Parent = gui,
     })
 
-    local selector = create("TextButton", {
-        Name = "Selector",
-        Size = UDim2.new(1, 0, 0, 30),
-        BackgroundColor3 = THEME.Element,
+    local titleBar = create("Frame", {
+        Name = "TitleBar",
+        Size = UDim2.new(1, 0, 0, 44),
+        BackgroundColor3 = THEME.Top,
         BorderColor3 = THEME.BorderDark,
+        BorderSizePixel = 1,
+        ZIndex = 32,
+        Parent = menuRoot,
+    })
+
+    create("Frame", {
+        Position = UDim2.fromOffset(2, 43),
+        Size = UDim2.new(1, -4, 0, 1),
+        BackgroundColor3 = THEME.Accent,
+        BorderSizePixel = 0,
+        ZIndex = 33,
+        Parent = titleBar,
+    })
+
+    codeLabel(titleBar, "RAINZX DEV", 13, THEME.BrightText, 34)
+    local menuSubtitle = codeLabel(titleBar, "script menu", 10, THEME.DimText, 34)
+    menuSubtitle.Position = UDim2.fromOffset(10, 22)
+    menuSubtitle.Size = UDim2.fromOffset(170, 16)
+
+    local minimizeButton = create("TextButton", {
+        Name = "Minimize",
+        Position = UDim2.new(1, -94, 0, 8),
+        Size = UDim2.fromOffset(40, 28),
+        BackgroundColor3 = THEME.Element,
+        BorderColor3 = THEME.Border,
         BorderSizePixel = 1,
         AutoButtonColor = false,
         Font = Enum.Font.Code,
-        Text = "  select script...",
+        Text = "-",
         TextColor3 = THEME.Text,
-        TextSize = 11,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        ZIndex = 42,
-        Parent = picker,
+        TextSize = 14,
+        ZIndex = 36,
+        Parent = titleBar,
+    })
+
+    local closeButton = create("TextButton", {
+        Name = "Close",
+        Position = UDim2.new(1, -50, 0, 8),
+        Size = UDim2.fromOffset(40, 28),
+        BackgroundColor3 = THEME.Element,
+        BorderColor3 = THEME.Border,
+        BorderSizePixel = 1,
+        AutoButtonColor = false,
+        Font = Enum.Font.Code,
+        Text = "x",
+        TextColor3 = THEME.Danger,
+        TextSize = 13,
+        ZIndex = 36,
+        Parent = titleBar,
+    })
+
+    local body = create("CanvasGroup", {
+        Name = "Body",
+        Position = UDim2.fromOffset(0, 44),
+        Size = UDim2.new(1, 0, 1, -88),
+        BackgroundColor3 = THEME.Section,
+        BorderColor3 = THEME.Border,
+        BorderSizePixel = 1,
+        ZIndex = 31,
+        Parent = menuRoot,
     })
 
     create("Frame", {
         Position = UDim2.fromOffset(1, 1),
         Size = UDim2.new(1, -2, 1, -2),
         BackgroundTransparency = 1,
-        BorderColor3 = THEME.Border,
-        BorderSizePixel = 1,
-        ZIndex = 43,
-        Parent = selector,
-    })
-
-    local arrow = codeLabel(selector, "v", 11, THEME.DimText, 44)
-    arrow.AnchorPoint = Vector2.new(1, 0)
-    arrow.Position = UDim2.new(1, -8, 0, 0)
-    arrow.Size = UDim2.fromOffset(18, 30)
-    arrow.TextXAlignment = Enum.TextXAlignment.Center
-
-    local menu = create("ScrollingFrame", {
-        Name = "Options",
-        Position = UDim2.fromOffset(0, 36),
-        Size = UDim2.new(1, 0, 0, 154),
-        BackgroundColor3 = THEME.Section,
         BorderColor3 = THEME.BorderDark,
         BorderSizePixel = 1,
-        CanvasSize = UDim2.new(),
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-        ScrollBarThickness = 2,
-        ScrollBarImageColor3 = THEME.DimText,
-        ScrollingDirection = Enum.ScrollingDirection.Y,
-        Visible = false,
-        ZIndex = 60,
-        Parent = picker,
+        ZIndex = 32,
+        Parent = body,
     })
 
-    create("Frame", {
-        Position = UDim2.fromOffset(1, 1),
-        Size = UDim2.new(1, -2, 1, -2),
+    local scriptList = create("ScrollingFrame", {
+        Name = "Scripts",
+        Size = UDim2.new(1, 0, 1, -40),
         BackgroundTransparency = 1,
-        BorderColor3 = THEME.Border,
-        BorderSizePixel = 1,
-        ZIndex = 61,
-        Parent = menu,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = THEME.DimText,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+        ZIndex = 33,
+        Parent = body,
     })
 
     create("UIPadding", {
         PaddingTop = UDim.new(0, 5), PaddingBottom = UDim.new(0, 5),
         PaddingLeft = UDim.new(0, 5), PaddingRight = UDim.new(0, 5),
-        Parent = menu,
+        Parent = scriptList,
     })
 
     create("UIListLayout", {
         Padding = UDim.new(0, 4),
         SortOrder = Enum.SortOrder.LayoutOrder,
-        Parent = menu,
+        Parent = scriptList,
     })
 
-    local manualRoutes = {
+    local footer = codeLabel(body, "tap a script to run it", 10, THEME.DimText, 33)
+    footer.Position = UDim2.new(0, 10, 1, -34)
+    footer.Size = UDim2.new(1, -20, 0, 28)
+    footer.TextXAlignment = Enum.TextXAlignment.Center
+
+    local function kindTag(sourceKey)
+        if string.find(sourceKey or "", "AimbotRage_FullBuild") then return "SNIPER" end
+        if string.find(sourceKey or "", "RainzxDev_Hub") then return "HUB" end
+        if string.find(sourceKey or "", "RainzxDev_FpsHub") then return "FPS" end
+        return "MOD"
+    end
+
+    local scriptOptions = {
         ROUTES[83038462357724],
         ROUTES[134162299584012],
         ROUTES[142823291],
@@ -967,42 +1029,44 @@ local function chooseRouteManually(placeId)
     }
 
     local selectedRoute = nil
-    local open = false
+    local closed = false
     local busy = false
+    local collapsed = false
 
-    local function setDropdown(openState)
+    minimizeButton.MouseEnter:Connect(function()
+        if not busy then tween(minimizeButton, 0.08, {BackgroundColor3 = THEME.ElementHover}) end
+    end)
+    minimizeButton.MouseLeave:Connect(function()
+        if not busy then tween(minimizeButton, 0.08, {BackgroundColor3 = THEME.Element}) end
+    end)
+    minimizeButton.MouseButton1Click:Connect(function()
         if busy or cancelled then return end
-        open = openState == true
-        LOADER_EXPANDED = open
-        if open then
-            menu.Visible = true
-            arrow.Text = "^"
-            tween(card, 0.18, {Size = UDim2.fromOffset(WINDOW_WIDTH, EXPANDED_HEIGHT)})
-            tween(shadow, 0.18, {Size = UDim2.fromOffset(WINDOW_WIDTH, EXPANDED_HEIGHT)})
-            tween(picker, 0.18, {Size = UDim2.new(1, -56, 0, 196)})
-        else
-            arrow.Text = "v"
-            menu.Visible = false
-            tween(card, 0.18, {Size = targetCardSize})
-            tween(shadow, 0.18, {Size = targetCardSize})
-            tween(picker, 0.18, {Size = UDim2.new(1, -56, 0, 34)})
-        end
-    end
-
-    selector.MouseEnter:Connect(function()
-        if not busy then tween(selector, 0.08, {BackgroundColor3 = THEME.ElementHover}) end
+        collapsed = not collapsed
+        body.Visible = not collapsed
+        local target = collapsed
+            and UDim2.fromOffset(menuWidth, 44)
+            or UDim2.fromOffset(menuWidth, menuHeight)
+        tween(menuRoot, 0.15, {Size = target})
+        tween(menuShadow, 0.15, {Size = target})
     end)
-    selector.MouseLeave:Connect(function()
-        if not busy then tween(selector, 0.08, {BackgroundColor3 = THEME.Element}) end
-    end)
-    selector.MouseButton1Click:Connect(function() setDropdown(not open) end)
 
-    for index, option in ipairs(manualRoutes) do
+    closeButton.MouseEnter:Connect(function()
+        if not busy then tween(closeButton, 0.08, {BackgroundColor3 = THEME.ElementHover}) end
+    end)
+    closeButton.MouseLeave:Connect(function()
+        if not busy then tween(closeButton, 0.08, {BackgroundColor3 = THEME.Element}) end
+    end)
+    closeButton.MouseButton1Click:Connect(function()
+        if busy or cancelled then return end
+        closed = true
+    end)
+
+    for index, option in ipairs(scriptOptions) do
         local routeOption = {name = option.name, source = option.source, url = option.url}
         local item = create("TextButton", {
-            Name = "Option" .. tostring(index),
+            Name = "Script" .. tostring(index),
             LayoutOrder = index,
-            Size = UDim2.new(1, -2, 0, 27),
+            Size = UDim2.new(1, -2, 0, 30),
             BackgroundColor3 = THEME.Element,
             BorderColor3 = THEME.BorderDark,
             BorderSizePixel = 1,
@@ -1012,14 +1076,20 @@ local function chooseRouteManually(placeId)
             TextColor3 = THEME.Text,
             TextSize = 11,
             TextXAlignment = Enum.TextXAlignment.Left,
-            ZIndex = 62,
-            Parent = menu,
+            ZIndex = 34,
+            Parent = scriptList,
         })
 
         create("Frame", {
             Position = UDim2.fromOffset(1, 1), Size = UDim2.new(1, -2, 1, -2),
-            BackgroundTransparency = 1, BorderColor3 = THEME.Border, BorderSizePixel = 1, ZIndex = 63, Parent = item,
+            BackgroundTransparency = 1, BorderColor3 = THEME.Border, BorderSizePixel = 1, ZIndex = 35, Parent = item,
         })
+
+        local tag = codeLabel(item, kindTag(routeOption.source), 9, THEME.DimText, 36)
+        tag.AnchorPoint = Vector2.new(1, 0.5)
+        tag.Position = UDim2.new(1, -10, 0.5, 0)
+        tag.Size = UDim2.fromOffset(54, 14)
+        tag.TextXAlignment = Enum.TextXAlignment.Right
 
         item.MouseEnter:Connect(function()
             if not busy then tween(item, 0.08, {BackgroundColor3 = THEME.ElementHover}) end
@@ -1032,30 +1102,30 @@ local function chooseRouteManually(placeId)
             if busy or cancelled then return end
             busy = true
             selectedRoute = {name = routeOption.name, source = routeOption.source, url = routeOption.url}
-            selector.Text = "  " .. selectedRoute.name
             setStatus(selectedRoute.name, "Preparing script...")
             item.BackgroundColor3 = THEME.ElementHover
-            open = false
-            menu.Visible = false
-            arrow.Text = "v"
-            task.wait(0.12)
         end)
     end
 
-    tween(picker, 0.12, {GroupTransparency = 0})
+    footer.Text = "place " .. tostring(placeId or "?")
+        .. " | universe " .. tostring(universeId or "?")
+        .. " | not detected"
 
-    while not selectedRoute and gui.Parent and not cancelled do
+    tween(menuRoot, 0.12, {GroupTransparency = 0})
+    tween(menuShadow, 0.12, {BackgroundTransparency = 0.5})
+
+    while not selectedRoute and not closed and gui.Parent and not cancelled do
         task.wait(0.03)
     end
 
-    if cancelled or not selectedRoute then return nil end
-
-    local fade = tween(picker, 0.10, {GroupTransparency = 1})
+    local fade = tween(menuRoot, 0.10, {GroupTransparency = 1})
+    tween(menuShadow, 0.10, {BackgroundTransparency = 1})
     fade.Completed:Wait()
-    if picker.Parent then picker:Destroy() end
-    LOADER_EXPANDED = false
-    card.Size = targetCardSize
-    shadow.Size = targetCardSize
+
+    if menuRoot.Parent then pcall(function() menuRoot:Destroy() end) end
+    if menuShadow.Parent then pcall(function() menuShadow:Destroy() end) end
+
+    if cancelled or closed or not selectedRoute then return nil end
     return selectedRoute
 end
 
@@ -1103,7 +1173,7 @@ task.spawn(function()
     task.wait(0.20)
 
     if not route then
-        route = chooseRouteManually(placeId)
+        route = showScriptMenu(placeId, universeId)
         if not route then
             fail("No Script Selected", "Manual script selection was closed")
             return
