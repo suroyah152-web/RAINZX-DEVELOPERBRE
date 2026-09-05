@@ -18,6 +18,9 @@
 
     One free loader for all supported RAINZX DEV scripts.
     Includes automatic PlaceId + universe detection, an automatic script menu, and universal anti-AFK.
+    After a module loads, the loader verifies that a menu actually appeared; if a loaded module
+    silently exits without showing any menu (wrong game / script version), it reopens the script
+    menu automatically so the user can pick another script instead of being stuck.
 ]]
 
 local ENV = (getgenv and getgenv()) or _G
@@ -1131,6 +1134,47 @@ end
 
 
 -- =========================
+-- Module Menu Detection
+-- =========================
+
+local function hasModuleMenu()
+    local parents = {CoreGui}
+    local player = Players.LocalPlayer
+    if player then
+        local playerGui = player:FindFirstChildOfClass("PlayerGui")
+        if playerGui then
+            table.insert(parents, 1, playerGui)
+        end
+    end
+    if type(gethui) == "function" then
+        local ok, target = pcall(gethui)
+        if ok and target then
+            table.insert(parents, target)
+        end
+    end
+
+    for i = 1, #parents do
+        local children = parents[i]:GetChildren()
+        for j = 1, #children do
+            local child = children[j]
+            if child.ClassName == "ScreenGui" then
+                local name = child.Name
+                if name == "RAINZXHub"
+                    or name == "RainzxFpsHub"
+                    or name == "SniperArenaAimESP"
+                    or (string.sub(name, 1, 10) == "RAINZXDev_"
+                        and name ~= "RAINZXDev_Notifications")
+                then
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+
+-- =========================
 -- Entrance Animation + Loader Sequence
 -- =========================
 
@@ -1182,64 +1226,96 @@ task.spawn(function()
 
     if cancelled then return end
 
-    setStatus(route.name, "Script found")
-    setProgress(0.42)
-    task.wait(0.18)
+    local moduleMenuSeen = false
+    local moduleMenuTimeout = 4.0
 
-    setStatus(route.name, "Connecting...")
-    setProgress(0.52)
+    while route and not cancelled and not moduleMenuSeen do
+        progressFill.BackgroundColor3 = THEME.Accent
+        accentTop.BackgroundColor3 = THEME.Accent
+        autoText.Text = "automatic script detection"
+        autoText.TextColor3 = THEME.DimText
 
-    local downloadOk, source = fetchSource(route.url)
-    if not downloadOk then
-        fail("Download Failed", source)
-        return
+        setStatus(route.name, "Script found")
+        setProgress(0.42)
+        task.wait(0.18)
+
+        setStatus(route.name, "Connecting...")
+        setProgress(0.52)
+
+        local downloadOk, source = fetchSource(route.url)
+        if not downloadOk then
+            fail("Download Failed", source)
+            return
+        end
+
+        setStatus(route.name, "Downloading...")
+        setProgress(0.68)
+        task.wait(0.20)
+
+        if #source < 20 then
+            fail("Invalid Script", "Script source returned an unexpectedly small file")
+            return
+        end
+
+        setStatus(route.name, "Preparing...")
+        setProgress(0.78)
+        task.wait(0.15)
+
+        local compiler = loadstring or load
+        if type(compiler) ~= "function" then
+            fail("Compiler Unavailable", "This environment does not provide loadstring/load")
+            return
+        end
+
+        setStatus(route.name, "Compiling...")
+        setProgress(0.88)
+
+        local chunk, compileError = compiler(source)
+        if not chunk then
+            fail("Compile Failed", compileError)
+            return
+        end
+
+        setStatus(route.name, "Waiting for menu...")
+        setProgress(0.96)
+
+        local runtimeFinished = false
+        local runtimeOk = true
+        local runtimeError
+
+        task.spawn(function()
+            runtimeOk, runtimeError = pcall(chunk)
+            runtimeFinished = true
+        end)
+
+        local menuStarted = os.clock()
+        while not cancelled and os.clock() - menuStarted < moduleMenuTimeout do
+            if runtimeFinished and not runtimeOk then
+                fail("Launch Failed", runtimeError)
+                return
+            end
+            if hasModuleMenu() then
+                moduleMenuSeen = true
+                break
+            end
+            task.wait(0.05)
+        end
+
+        if moduleMenuSeen then break end
+        if cancelled then return end
+
+        fail("No Menu Detected",
+            "Script exited but no menu appeared (wrong game / script version)")
+
+        task.wait(0.70)
+        route = showScriptMenu(placeId, universeId)
+        if not route then
+            fail("No Script Selected", "Manual script selection was closed")
+            return
+        end
     end
 
-    setStatus(route.name, "Downloading...")
-    setProgress(0.68)
-    task.wait(0.20)
-
-    if #source < 20 then
-        fail("Invalid Script", "Script source returned an unexpectedly small file")
-        return
-    end
-
-    setStatus(route.name, "Preparing...")
-    setProgress(0.78)
-    task.wait(0.15)
-
-    local compiler = loadstring or load
-    if type(compiler) ~= "function" then
-        fail("Compiler Unavailable", "This environment does not provide loadstring/load")
-        return
-    end
-
-    setStatus(route.name, "Compiling...")
-    setProgress(0.88)
-
-    local chunk, compileError = compiler(source)
-    if not chunk then
-        fail("Compile Failed", compileError)
-        return
-    end
-
-    setStatus(route.name, "Launching...")
-    setProgress(0.96)
-
-    local runtimeFinished = false
-    local runtimeOk = true
-    local runtimeError
-
-    task.spawn(function()
-        runtimeOk, runtimeError = pcall(chunk)
-        runtimeFinished = true
-    end)
-
-    task.wait(0.20)
-    if runtimeFinished and not runtimeOk then
-        fail("Launch Failed", runtimeError)
-        return
-    end
+    if not route or not moduleMenuSeen then return end
 
     setProgress(1)
     progressFill.BackgroundColor3 = THEME.Success
